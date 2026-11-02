@@ -9,7 +9,7 @@ function projectInfo(){const p=status.projects.find(p=>p.id===$('project').value
 async function refresh(){
   status=await api('status');csrf=status.csrf;$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;
   $('provider').textContent=`Proveedor: ${status.provider}${status.provider==='simulation'?' · SIMULACIÓN':''}`;$('readiness').textContent=status.provider==='simulation'?'Modo de prueba: sin llamadas a modelos externos.':status.ready?'Integración configurada; la prueba real debe verificarse.':'Inferencia detenida: faltan credencial o configuración autorizada.';
-  $('runner-status').textContent=status.checkBackend==='github-actions'?`Pruebas en GitHub Actions: ${status.remote?.ready?'configuradas':'detenidas hasta configurar acceso y confirmar minutos incluidos'}. Reserva: ${status.remote?.minutesReserved||0} / ${status.remote?.minutesLimit||0} minutos.`:'Pruebas en contenedor local.';
+  $('runner-status').textContent='Pruebas en ejecutor Docker aislado: se requiere un host e imagen revisados. GitHub Actions deshabilitado.';
   const previous=$('project').value;
   const successor=p=>p.mode==='preparation'&&!p.repository?status.projects.find(other=>other.mode==='development'&&other.repository&&other.name.startsWith(p.name)):null;
   const preferred=status.projects.find(p=>successor(p));

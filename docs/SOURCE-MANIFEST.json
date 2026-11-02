@@ -1,0 +1,331 @@
+{
+  "sourceHead": "4d00cae250ed713fe6a26190a1233ff4969291d9",
+  "sourceFiles": 54,
+  "note": "Paths map original files to this standalone repository; migrated files may have documented independence fixes. Seed registry also copied to config/projects.json.",
+  "files": [
+    {
+      "source": "docs/ad507-technology-agent/MULTIPROJECT_DEEPSEEK.md",
+      "sha": "19aeadfc4753fc26e1ae5362f92752d2ccd0ad67",
+      "size": 5992,
+      "destination": "docs/legacy/MULTIPROJECT_DEEPSEEK.md"
+    },
+    {
+      "source": "docs/ad507-technology-agent/OPERATIONS.md",
+      "sha": "5b4399bec51d1712c22b7016947a23ad52c8937d",
+      "size": 9871,
+      "destination": "docs/legacy/OPERATIONS.md"
+    },
+    {
+      "source": "docs/ad507-technology-agent/RAILWAY_ACTIONS.md",
+      "sha": "8268312f031d3445b04b69af2814a47d9b93258e",
+      "size": 9813,
+      "destination": "docs/legacy/RAILWAY_ACTIONS.md"
+    },
+    {
+      "source": "docs/ad507-technology-agent/README.md",
+      "sha": "07e1e3b2c460b9c795afd162f7f567412a7459e9",
+      "size": 1034,
+      "destination": "docs/legacy/README.md"
+    },
+    {
+      "source": "docs/ad507-technology-agent/guardrails.json",
+      "sha": "e0cee7a4f9e34e0aaa89342a421672c2966954b1",
+      "size": 662,
+      "destination": "docs/legacy/guardrails.json"
+    },
+    {
+      "source": "docs/ad507-technology-agent/projects.json",
+      "sha": "af89fe16e948175f27b608f9d8b2ca92229761bc",
+      "size": 1551,
+      "destination": "docs/legacy/projects.json"
+    },
+    {
+      "source": "tools/ad507-agent/.env.example",
+      "sha": "46e58e448def096407882e1c0d5c576cea29bb80",
+      "size": 1860,
+      "destination": ".env.example"
+    },
+    {
+      "source": "tools/ad507-agent/.gitignore",
+      "sha": "f5f1f4ca3288e2884031e85a570d45984a3f1f84",
+      "size": 68,
+      "destination": ".gitignore"
+    },
+    {
+      "source": "tools/ad507-agent/Dockerfile",
+      "sha": "478267668275d89b55ff524c4c77d119903b6680",
+      "size": 842,
+      "destination": "Dockerfile"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/ad507-developer.service",
+      "sha": "d53e05a375e4d952bb2dc0a8fe6696515eaa22c5",
+      "size": 505,
+      "destination": "deploy/ad507-developer.service"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/checks-ci.Dockerfile",
+      "sha": "a490cbc984bf3d6935a2717b4ffeee3d35aba1d7",
+      "size": 329,
+      "destination": "deploy/checks-ci.Dockerfile"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/checks.Dockerfile",
+      "sha": "869a04928dc9e5e19af8ca6ab1a9ad25797a42c2",
+      "size": 678,
+      "destination": "deploy/checks.Dockerfile"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/checks.Dockerfile.dockerignore",
+      "sha": "ac07c4d941453cfc05fbce88f5f1767a9082b2de",
+      "size": 146,
+      "destination": "deploy/checks.Dockerfile.dockerignore"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/entrypoint.sh",
+      "sha": "a4866089af0caba01335fa5252617e255298178b",
+      "size": 491,
+      "destination": "deploy/entrypoint.sh"
+    },
+    {
+      "source": "tools/ad507-agent/deploy/railway-plan.json",
+      "sha": "1fac24aaff7600e8ed8822ca7df7591ac510d95b",
+      "size": 1628,
+      "destination": "deploy/railway-plan.json"
+    },
+    {
+      "source": "tools/ad507-agent/package.json",
+      "sha": "597ee134f6a49b1b32d0d7ec9c4d22e4747cf8cf",
+      "size": 662,
+      "destination": "package.json"
+    },
+    {
+      "source": "tools/ad507-agent/railway.toml",
+      "sha": "059b9986fc33bf0f19883969f9dbd84c85427a19",
+      "size": 631,
+      "destination": "railway.toml"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/actions-checks.mjs",
+      "sha": "ea5e2225697254ec559f3b7c9314ac2c454da530",
+      "size": 13629,
+      "destination": "runtime/actions-checks.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/actions-checks.test.mjs",
+      "sha": "6960c29df058e7abaa59215df67086e70d05bcf0",
+      "size": 11910,
+      "destination": "runtime/actions-checks.test.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/auth.mjs",
+      "sha": "526a560a15e62244ef530ebe42975d1031ffd734",
+      "size": 1576,
+      "destination": "runtime/auth.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/checks-policy.mjs",
+      "sha": "a1969a0699a81b59818fba9f8d00411e897a036a",
+      "size": 730,
+      "destination": "runtime/checks-policy.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/config.mjs",
+      "sha": "246933e4c04b85da803eac297fdf56137a41caa9",
+      "size": 2635,
+      "destination": "runtime/config.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/controller.smoke.mjs",
+      "sha": "d703aef1e5d64d9fffc90576ead1056c32ed02e4",
+      "size": 3818,
+      "destination": "runtime/controller.smoke.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/engine.mjs",
+      "sha": "8eec3dccc02bb3d0a992ae4fb388bacbce3cca22",
+      "size": 14162,
+      "destination": "runtime/engine.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/hash-password.mjs",
+      "sha": "8ce9af138c5305745578786dd07cfbbad8bb95a4",
+      "size": 351,
+      "destination": "runtime/hash-password.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/main.mjs",
+      "sha": "1dc19a950a3d8e05eac6d323a621a7b1666b8192",
+      "size": 1626,
+      "destination": "runtime/main.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/panel.browser.mjs",
+      "sha": "f0fb33fe851f462b2d142aa7c4eca528a3bb7f55",
+      "size": 5609,
+      "destination": "runtime/panel.browser.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/panel.css",
+      "sha": "e6b8b763d6b2dc03d0504eadb60e9e279546161a",
+      "size": 3071,
+      "destination": "runtime/panel.css"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/panel.html",
+      "sha": "3d6ec69e8ac0f5dde4f84a333bc1a38b5a3839c9",
+      "size": 4295,
+      "destination": "runtime/panel.html"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/panel.js",
+      "sha": "421adfc9933bc92983aa8740b53209f769362d22",
+      "size": 9345,
+      "destination": "runtime/panel.js"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/project-check.mjs",
+      "sha": "39fa3f6dc1cb9ea4acf26f3fb25905391cc1d0eb",
+      "size": 987,
+      "destination": "runtime/project-check.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/projects.mjs",
+      "sha": "026a16c4f3492e1c39c0ae40a9ca77891ef80a6d",
+      "size": 5064,
+      "destination": "runtime/projects.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/projects.test.mjs",
+      "sha": "9a37178ecf52b4e98286e55d4abb1a41f3ac09e0",
+      "size": 7682,
+      "destination": "runtime/projects.test.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/provider.mjs",
+      "sha": "42107802a680d220ff01821d870b7b0d237ce9fe",
+      "size": 7324,
+      "destination": "runtime/provider.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/publisher.mjs",
+      "sha": "1e9f109445e7cf0180ec022517d8a6745553c8c1",
+      "size": 3560,
+      "destination": "runtime/publisher.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/remote-runner.mjs",
+      "sha": "63cc9f63354224d0700b1396db2ca15a78eb4803",
+      "size": 6609,
+      "destination": "runtime/remote-runner.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/remote.smoke.mjs",
+      "sha": "5743292f85dab068369c1ff6e60c6173c18f4f32",
+      "size": 6085,
+      "destination": "runtime/remote.smoke.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/runtime.test.mjs",
+      "sha": "80ea48668618e47e2e6b016a7e327838550438e0",
+      "size": 26340,
+      "destination": "runtime/runtime.test.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/sandbox-dependencies.mjs",
+      "sha": "eb4c389b07c6f16700d57f3dd59a99618726401e",
+      "size": 1873,
+      "destination": "runtime/sandbox-dependencies.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/sandbox.smoke.mjs",
+      "sha": "a34acbc04b99da30d9c30e3ae34ddc0b457afc30",
+      "size": 3039,
+      "destination": "runtime/sandbox.smoke.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/server.mjs",
+      "sha": "cbbc6d25eca397843f90c472f7b370c7f58828b7",
+      "size": 8168,
+      "destination": "runtime/server.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/source-cache.mjs",
+      "sha": "4fc0d77a2a5a7e258df1c4784ddde0822971d32c",
+      "size": 3366,
+      "destination": "runtime/source-cache.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/source-cache.test.mjs",
+      "sha": "5a2d56566dbe24aa761a09649155d1e63e8b4b7e",
+      "size": 4425,
+      "destination": "runtime/source-cache.test.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/store.mjs",
+      "sha": "216355483ad7137ae459a3c339f9134db45161fb",
+      "size": 4747,
+      "destination": "runtime/store.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/runtime/workspace.mjs",
+      "sha": "212dca8da59ba375fa0ad723e736af785b6fe563",
+      "size": 10282,
+      "destination": "runtime/workspace.mjs"
+    },
+    {
+      "source": "tools/ad507-agent/src/actionable-policy-text.test.ts",
+      "sha": "7c3b70d907cfcdc8beb7d8710ef16d99a6589e5c",
+      "size": 2009,
+      "destination": "src/actionable-policy-text.test.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/actionable-policy-text.ts",
+      "sha": "5ab41b8a7a19906dea13df686eb9aa924524cdf9",
+      "size": 1272,
+      "destination": "src/actionable-policy-text.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/agents.ts",
+      "sha": "fc188077fee19d049a0d344c5ba3c21b89f450cb",
+      "size": 1675,
+      "destination": "src/agents.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/config.ts",
+      "sha": "7e659351cfd0ec2ebd53d85c94e881e5157e5fcd",
+      "size": 670,
+      "destination": "src/config.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/dry-run.ts",
+      "sha": "8fd078bad66207ec3053d848798c8e1fd0b061f6",
+      "size": 368,
+      "destination": "src/dry-run.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/index.ts",
+      "sha": "c1dd21a974c30f6cde90bd46e1a6b209870a8e6d",
+      "size": 1578,
+      "destination": "src/index.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/policy.test.ts",
+      "sha": "477090210df15aebf56a9c3d09ef096ab575bd35",
+      "size": 3141,
+      "destination": "src/policy.test.ts"
+    },
+    {
+      "source": "tools/ad507-agent/src/policy.ts",
+      "sha": "de0a425110c2408b1c777be6b073b2386656e397",
+      "size": 1480,
+      "destination": "src/policy.ts"
+    },
+    {
+      "source": "tools/ad507-agent/tsconfig.json",
+      "sha": "dfaa3a3e567c834de328b526d9f9040aa7bc5d8c",
+      "size": 188,
+      "destination": "tsconfig.json"
+    }
+  ]
+}

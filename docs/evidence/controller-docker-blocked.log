@@ -1,0 +1,24 @@
+CONTROLLER_IMAGE_TEST_FAILED spawn docker ENOENT
+node:internal/child_process:316
+      const err = new ErrnoException(exitCode, syscall);
+                  ^
+
+Error: spawn docker ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn docker',
+  path: 'docker',
+  spawnargs: [
+    'volume',
+    'create',
+    'ad507-ci-volume-fe0c1576-b710-4c76-b88f-5f3d3c6dbfbe'
+  ],
+  cmd: 'docker volume create ad507-ci-volume-fe0c1576-b710-4c76-b88f-5f3d3c6dbfbe',
+  stdout: '',
+  stderr: ''
+}
+
+Node.js v24.22.1

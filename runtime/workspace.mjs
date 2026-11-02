@@ -93,10 +93,17 @@ export class Workspace {
       }return snapshot;
     }catch(error){await rm(snapshot,{recursive:true,force:true});throw error;}
   }
+  async checkAvailability(){
+    if(this.c.checkBackend!=='local-docker')throw Error('GITHUB_ACTIONS_DISABLED');
+    if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
+    try{await this.containerExec('docker',['image','inspect',this.c.sandboxImage],{env:{PATH:process.env.PATH},timeout:10000,maxBuffer:16000});}
+    catch{throw Error('SANDBOX_NOT_AVAILABLE');}
+  }
   async run(t,p,name,signal){
+    registeredProject(this.c,p);if(t.project!==p.id)throw Error('PROJECT_NOT_AUTHORIZED');
     await this.branch(t);
     const command=requireCheck(p,name);
-    if(this.c.checkBackend==='github-actions'){if(!this.remote)throw Error('REMOTE_RUNNER_NOT_CONFIGURED');return this.remote.run(t,p,name,signal);}
+    if(this.c.checkBackend==='github-actions')throw Error('GITHUB_ACTIONS_DISABLED');
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     const root=this.root(t);const container=`ad507-${t.id}`;
     const snapshot=await this.snapshot(t);

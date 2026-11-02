@@ -1,3 +1,4 @@
+// HISTORICAL OFFLINE PROTOCOL TEST ONLY; operational GitHub Actions backend is disabled.
 // Ephemeral CI: real HTTP controller and Docker runner. GitHub dispatch/identity API is a fixture;
 // no real provider key, public controller, long-lived token, billable Railway service or production access.
 import assert from 'node:assert/strict';
@@ -15,9 +16,9 @@ import { createApp } from './server.mjs';
 import { passwordHash } from './auth.mjs';
 import { prepareRemote, executeRemote } from './remote-runner.mjs';
 const root=await mkdtemp(join(tmpdir(),'ad507-remote-ci-'));const source=join(root,'source');await mkdir(source);
-const repository=fileURLToPath(new URL('../../../',import.meta.url));
-for(const path of ['tools/ad507-agent/runtime','tools/ad507-agent/src','docs/ad507-technology-agent/projects.json','tools/ad507-agent/package.json','tools/ad507-agent/tsconfig.json','package.json','pnpm-workspace.yaml']){await mkdir(dirname(join(source,path)),{recursive:true});await cp(join(repository,path),join(source,path),{recursive:true});}
-await writeFile(join(source,'tools/ad507-agent/runtime/remote-boundary.test.mjs'),`
+const repository=fileURLToPath(new URL('../',import.meta.url));
+for(const path of ['runtime','src','config/projects.json','package.json','tsconfig.json']){await mkdir(dirname(join(source,path)),{recursive:true});await cp(join(repository,path),join(source,path),{recursive:true});}
+await writeFile(join(source,'runtime/remote-boundary.test.mjs'),`
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile,access,writeFile} from 'node:fs/promises';import {networkInterfaces} from 'node:os';
 test('remote snapshot revision is tested without controller secrets/network/host write access',async()=>{
  assert.equal(await readFile('/source/docs/remote-change.md','utf8'),'remote snapshot revision');assert.equal(process.getuid(),1000);

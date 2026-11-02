@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { actionablePolicyText } from "./actionable-policy-text.js";
-import { classifyTask } from "./policy.js";
+import { actionablePolicyText } from "./actionable-policy-text.ts";
+import { classifyTask } from "./policy.ts";
 
 const classifyMission = (task: string) => classifyTask(actionablePolicyText(task));
 

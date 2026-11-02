@@ -1,0 +1,110 @@
+✔ remote check reserves minutes, validates GitHub identity and delivers a durable idempotent receipt (130.774308ms)
+✔ pause/restart reuses remote job and persisted key, without another dispatch or reservation (90.21456ms)
+✔ cancel revokes callback ticket and only cancels the recorded run (85.159598ms)
+✔ unconfirmed billing, missing tokens and exhausted minute caps prevent dispatch (93.688018ms)
+✔ unknown dispatch outcome is quarantined, never automatically sent twice (85.006572ms)
+✔ expired, wrong-job, wrong-run, changed-SHA and rerun-attempt tickets are rejected (80.688701ms)
+✔ HTTP runner endpoints enforce ticket and preserve normal panel authentication (171.195851ms)
+✔ remote receipt and minute ledger survive closing and reopening the actual SQLite database (94.709778ms)
+✔ runner rejects a compressed traversal payload even when its supplied digest matches (2.319765ms)
+✔ non-LEVEIA checks fail closed without reserving minutes or dispatching (61.844869ms)
+✖ owner registry persists additions without overwriting projects or duplicating registration on restart (27.445403ms)
+✔ registration requires explicit authorization and rejects credential fields, invalid paths and protected permissions (24.43724ms)
+✔ project tokens never inherit another repository credential and checks are assigned per project (26.024047ms)
+✔ two authorized repository checkouts and PR publishers keep origins, credentials and task files isolated (283.264314ms)
+✔ DeepSeek is the only live provider and global reservations cap combined project spend (16.189274ms)
+✖ registry API is owner authenticated and CSRF protected; new projects immediately appear in selector data (185.731254ms)
+✔ task simulation creates real isolated Git branch and file, then awaits human review (140.89032ms)
+✔ SQLite survives real child process SIGKILL; interrupted mutation requires review and is not replayed (77.403331ms)
+✔ single instance lock rejects a second runtime (12.861746ms)
+✔ pause/resume pending task, then cancellation stops before model request (13.138966ms)
+✔ pause in-flight request aborts, keeps reservation and requires reviewed recovery (122.059676ms)
+✔ cancel in-flight request is durable and never auto-resumes (36.225874ms)
+✔ task and lifetime project caps are reserved transactionally before calls (93.4265ms)
+✔ protected instructions cannot be approved into production and other projects are denied (16.230625ms)
+✔ path traversal, symlinks, hardlinks, control files, main writes and Junta construction blocked (145.06176ms)
+✔ projects have independent workspace roots and data cannot be traversed between jobs (285.249651ms)
+✔ unknown model tools are critical failures, not executed shell commands (36.520337ms)
+✔ DeepSeek adapter uses configured provider only, validates output and never retries paid calls (3.569138ms)
+✔ PR preparation uses allowlisted repo, task ref and draft; retry reuses existing PR (117.492314ms)
+✔ private API login, CSRF, task creation, file delivery and persistence (278.839107ms)
+✔ Docker check fails closed when no sandbox is available; no host-shell fallback (114.743178ms)
+✔ missing live credentials do not create workspaces or spend (21.077783ms)
+✔ standalone server persists authenticated tasks across a real restart and works without an open browser (1082.041136ms)
+✔ literal patch preserves surrounding code and refuses ambiguous replacement (131.696111ms)
+✔ graceful server stop also preserves an approval-required recovery point (52.353888ms)
+✔ late provider response cannot overwrite a cancellation (43.801743ms)
+✔ multiple tools retain the original assistant calls through execution and SQLite checkpoints (106.701767ms)
+✔ tool sequence rejects orphan, missing, duplicate and out-of-order responses before HTTP (0.90945ms)
+✔ corrupt persisted history stops before reserving budget or sending a request (17.78002ms)
+✔ a paused multi-tool batch resumes from SQLite without repeating the completed call (112.884106ms)
+✖ listing inventory, wildcard aliases and unmatched filters differ from the modified-file audit (179.235019ms)
+✔ missing file is recoverable but missing checkout is a read error, never an empty inventory (172.394712ms)
+✔ unchanged repeated inventory stops before a third paid reservation, including after SQLite checkpoint (84.078023ms)
+✔ three distinct empty filters stop the model loop without a fourth reservation (121.018166ms)
+✔ a local preparation project cannot silently execute instructions targeting an authorized GitHub repository (10.630133ms)
+✔ source bootstrap/fetch is limited to LEVEIA main, with credentials only in subprocess environment (34.115588ms)
+✔ sandbox dependencies reuse third-party packages but workspace links target the changed snapshot (10.112152ms)
+✔ a shallow authenticated-source cache produces a real independent task checkout (107.410129ms)
+ℹ tests 48
+ℹ suites 0
+ℹ pass 45
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3787.924931
+
+✖ failing tests:
+
+test at tools/ad507-agent/runtime/projects.test.mjs:19:1
+✖ owner registry persists additions without overwriting projects or duplicating registration on restart (27.445403ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  6 !== 5
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/297d09b11ebb/ad507-origin/tools/ad507-agent/runtime/projects.test.mjs:20:41)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 6,
+    expected: 5,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tools/ad507-agent/runtime/projects.test.mjs:46:1
+✖ registry API is owner authenticated and CSRF protected; new projects immediately appear in selector data (185.731254ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  7 !== 6
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/297d09b11ebb/ad507-origin/tools/ad507-agent/runtime/projects.test.mjs:51:86)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 7,
+    expected: 6,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tools/ad507-agent/runtime/runtime.test.mjs:210:1
+✖ listing inventory, wildcard aliases and unmatched filters differ from the modified-file audit (179.235019ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/297d09b11ebb/ad507-origin/tools/ad507-agent/runtime/runtime.test.mjs:214:51)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

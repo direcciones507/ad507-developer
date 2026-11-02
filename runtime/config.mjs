@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { normalizeProject } from './projects.mjs';
 export const TASK_BRANCH = /^ad507\/task-[a-z0-9][a-z0-9-]{2,80}$/;
-export const registryPath = fileURLToPath(new URL('../../../docs/ad507-technology-agent/projects.json', import.meta.url));
+export const registryPath = fileURLToPath(new URL('../config/projects.json', import.meta.url));
 export function loadConfig(env=process.env) {
   const seeds=JSON.parse(readFileSync(registryPath,'utf8')).projects;
   const projects=Object.create(null);for(const [id,p] of Object.entries(seeds))projects[id]=normalizeProject(id,p,env);
@@ -13,7 +13,8 @@ export function loadConfig(env=process.env) {
   const globalCap=Number(env.AD507_BUDGET_MICROUSD||1000000);
   if(!Number.isSafeInteger(globalCap)||globalCap<1)throw Error('INVALID_GLOBAL_BUDGET');
   const checkBackend=env.AD507_CHECK_BACKEND||'local-docker';
-  if(!['local-docker','github-actions'].includes(checkBackend))throw Error('INVALID_CHECK_BACKEND');
+  if(checkBackend==='github-actions')throw Error('GITHUB_ACTIONS_DISABLED');
+  if(checkBackend!=='local-docker')throw Error('INVALID_CHECK_BACKEND');
   return {root,projects,provider,globalCap,checkBackend,sourceMode:env.AD507_SOURCE_MODE||'manual',
     sourceToken:env.AD507_SOURCE_GITHUB_TOKEN||env.AD507_GITHUB_TOKEN||env.AD507_ACTIONS_GITHUB_TOKEN,
     actionsToken:env.AD507_ACTIONS_GITHUB_TOKEN||env.AD507_GITHUB_TOKEN,
@@ -26,7 +27,7 @@ export function loadConfig(env=process.env) {
     model:env.AD507_MODEL||env.DEEPSEEK_MODEL||'deepseek-flash',apiKey:env.DEEPSEEK_API_KEY,
     inputRate:Number(env.AD507_INPUT_MICROUSD_PER_TOKEN||0),outputRate:Number(env.AD507_OUTPUT_MICROUSD_PER_TOKEN||0),
     maxOutput:2048,maxSteps:40,maxTaskMs:30*60*1000,
-    sandboxImage:env.AD507_SANDBOX_IMAGE||'node:24-bookworm-slim',
+    sandboxImage:env.AD507_SANDBOX_IMAGE||'ad507-checks:reviewed',
     publishing:env.AD507_PUBLISH_ENABLED==='true',env};
 }
 export function projectFor(config,id){const p=config.projects[id];if(!p?.enabled)throw Error('PROJECT_NOT_AUTHORIZED');return p;}

@@ -1,0 +1,10 @@
+file:///workspace/scratch/297d09b11ebb/ad507-developer/runtime/workspace.mjs:122
+    catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
+                                        ^
+
+Error: SANDBOX_NOT_AVAILABLE
+    at Workspace.runSnapshot (file:///workspace/scratch/297d09b11ebb/ad507-developer/runtime/workspace.mjs:122:41)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///workspace/scratch/297d09b11ebb/ad507-developer/runtime/sandbox.smoke.mjs:34:15
+
+Node.js v24.22.1

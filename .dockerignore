@@ -1,0 +1,7 @@
+.git
+node_modules
+.env
+.env.*
+ad507-data
+*.sqlite*
+docs/evidence

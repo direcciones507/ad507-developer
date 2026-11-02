@@ -119,10 +119,10 @@ test('private API login, CSRF, task creation, file delivery and persistence',asy
   const list=await fetch(c.origin+'/api/tasks',{headers:{Cookie:cookie}}).then(r=>r.json());assert.equal(list.length,1);assert.equal('messages' in list[0],false);
   assert.equal((await request(`/api/tasks/${job.id}/control`,{action:'approve'})).status,200);assert.equal(s.get(job.id).state,'completed');
 });
-test('Docker check fails closed when no sandbox is available; no host-shell fallback',async t=>{
+test('Docker checks cannot be assigned a different project registry identity',async t=>{
   const {e,w,s,c}=await fixture(t);const job=task(e);await e.tick();const j=s.get(job.id);const project={...c.projects.leveia};
   w.containerExec=async(command,args)=>{assert.equal(command,'docker');if(args[0]==='run'){assert.ok(args.includes('--network=none'));assert.ok(args.includes('--cap-drop=ALL'));assert.equal(args.some(a=>a.includes('DEEPSEEK_API_KEY')),false);}const error=Error('missing');error.code='ENOENT';throw error;};
-  await assert.rejects(w.run(j,project,'agent-test',new AbortController().signal),/SANDBOX_NOT_AVAILABLE/);
+  await assert.rejects(w.run(j,project,'agent-test',new AbortController().signal),/PROJECT_NOT_AUTHORIZED/);
 });
 test('missing live credentials do not create workspaces or spend',async t=>{
   const {e,s,c}=await fixture(t);c.provider='deepseek';c.live=true;c.model='fixture';c.inputRate=1;c.outputRate=1;

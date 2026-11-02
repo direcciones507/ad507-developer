@@ -1,4 +1,4 @@
-import { classifyTask } from "./policy.js";
+import { classifyTask } from "./policy.ts";
 
 const task = process.argv.slice(2).join(" ").trim();
 if (!task) throw new Error("Provide a task as the command argument.");

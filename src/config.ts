@@ -4,7 +4,7 @@ export const agentConfig = {
   name: "AD507 Developer",
   provider: process.env.AD507_PROVIDER ?? "deepseek",
   model: process.env.AD507_MODEL ?? null,
-  project: process.env.AD507_PROJECT ?? "leveia",
+  project: process.env.AD507_PROJECT ?? null,
   maxTurns: 40,
 } as const;
 export const approvalRequired = new Set([

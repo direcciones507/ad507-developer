@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { actionablePolicyText } from "./actionable-policy-text.js";
-import { classifyTask } from "./policy.js";
+import { actionablePolicyText } from "./actionable-policy-text.ts";
+import { classifyTask } from "./policy.ts";
 
 test("Spanish prohibitions are not treated as requested actions", () => {
   const mission = "Audita documentos. No hagas acciones protegidas. Revisa los renderers.";

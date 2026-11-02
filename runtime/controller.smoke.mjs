@@ -15,7 +15,7 @@ async function delivery(task,cookie){for(let i=0;i<100;i++){const t=await fetch(
 try{
  await docker(['volume','create',volume]);
  await docker(['run','-d','--name',name,'--network=host','--read-only','--tmpfs','/tmp:rw,nosuid,size=64m','--volume',`${volume}:/data`,
-  '--env',`PORT=${port}`,'--env','AD507_HOST=127.0.0.1','--env',`AD507_ORIGIN=${origin}`,'--env',`AD507_OWNER_PASSWORD_HASH=${passwordHash(password)}`,'--env','AD507_PROVIDER=simulation','--env','AD507_CHECK_BACKEND=github-actions','ad507-controller:ci']);
+  '--env',`PORT=${port}`,'--env','AD507_HOST=127.0.0.1','--env',`AD507_ORIGIN=${origin}`,'--env',`AD507_OWNER_PASSWORD_HASH=${passwordHash(password)}`,'--env','AD507_PROVIDER=simulation','--env','AD507_CHECK_BACKEND=local-docker','ad507-controller:ci']);
  await healthy();const login=await fetch(origin+'/api/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({password})});assert.equal(login.status,200);
  const {csrf}=await login.json(),cookie=login.headers.get('set-cookie').split(';')[0];
  const headers={Origin:origin,'Content-Type':'application/json',Cookie:cookie,'X-CSRF-Token':csrf};

@@ -3,7 +3,7 @@ export const tools = [
   ['read_repository_file','Read a relative UTF-8 file.',{path:{type:'string'}}],
   ['write_repository_file','Write one file on the task branch.',{path:{type:'string'},content:{type:'string'}}],
   ['replace_repository_text','Replace exactly one literal occurrence without rewriting the rest of a file.',{path:{type:'string'},oldText:{type:'string'},newText:{type:'string'}}],
-  ['run_safe_check','Run an allowlisted check in a network-disabled sandbox.',{check:{type:'string',enum:['agent-test','agent-typecheck','api-typecheck','api-build','project-syntax']}}],
+  ['run_safe_check','Run an allowlisted check in a network-disabled sandbox.',{check:{type:'string',enum:['agent-test','agent-typecheck','api-typecheck','api-build','project-syntax','project-test','standalone-agent-test']}}],
   ['inspect_diff','Inspect changed file names on the task branch.',{}]
 ].map(([name,description,properties])=>({type:'function',function:{name,description,parameters:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}));
 const endpoint='https://api.deepseek.com/chat/completions';

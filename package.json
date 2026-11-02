@@ -1,23 +1,23 @@
 {
   "name": "@ad507/technology-agent",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
-    "start": "node --import tsx src/index.ts",
+    "start": "node runtime/main.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/*.test.ts",
-    "dry-run": "node --import tsx src/dry-run.ts",
+    "test": "node --test runtime/*.test.mjs src/*.test.ts",
+    "dry-run": "node src/dry-run.ts",
     "serve": "node runtime/main.mjs",
     "test:runtime": "node --test runtime/*.test.mjs",
-    "owner:hash": "node runtime/hash-password.mjs"
+    "owner:hash": "node runtime/hash-password.mjs",
+    "cli": "node src/index.ts",
+    "test:controller": "node runtime/controller.smoke.mjs",
+    "test:sandbox": "node runtime/sandbox.smoke.mjs"
   },
-  "dependencies": {
-    "zod": "^4.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^22.13.4",
-    "tsx": "^4.19.2",
+    "@types/node": "^24.0.0",
     "typescript": "^5.7.3"
   },
   "engines": {

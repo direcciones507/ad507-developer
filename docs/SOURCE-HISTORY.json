@@ -1,0 +1,78 @@
+{
+  "sourceRepository": "direcciones507/leveia",
+  "sourceBranch": "ad507/task-developer-runtime",
+  "sourceHead": "4d00cae250ed713fe6a26190a1233ff4969291d9",
+  "scope": "Only AD507 agent files and their corrections; unrelated private LeveIA history is not copied.",
+  "commits": [
+    {
+      "sha": "60012636cdcc4976c019b44bc577d0ee161bd006",
+      "message": "fix(ad507): quarantine stale source cache when project repository changes",
+      "date": "2026-11-02T00:43:53Z",
+      "url": "https://github.com/direcciones507/leveia/commit/60012636cdcc4976c019b44bc577d0ee161bd006",
+      "files": [
+        {
+          "path": "tools/ad507-agent/runtime/source-cache.mjs",
+          "sha": "4fc0d77a2a5a7e258df1c4784ddde0822971d32c",
+          "status": "modified",
+          "patch": "@@ -36,8 +36,23 @@ export class SourceCache {\n       } catch (error) { await rm(temp, { recursive: true, force: true }); throw error; }\n     } else {\n       const origin = await run(target, ['remote', 'get-url', 'origin']);\n-      if (origin.stdout.trim() !== `https://github.com/${project.repository}.git`) throw Error('SOURCE_REPOSITORY_MISMATCH');\n-      await run(target, ['fetch', '--depth=1', 'origin', '+'+ref]);\n+      if (origin.stdout.trim() !== `https://github.com/${project.repository}.git`) {\n+        // A project was historically routed to another repository. Never reuse\n+        // its cached Git objects; quarantine the old cache and fetch a clean one.\n+        const stale = join(parent, `stale-${project.id}-${randomUUID()}.git`);\n+        await rename(target, stale);\n+        const temp = join(parent, `preparing-${randomUUID()}`);\n+        await mkdir(temp, { mode: 0o700 });\n+        try {\n+          await run(temp, ['init', '--bare']);\n+          await run(temp, ['remote', 'add', 'origin', `https://github.com/${project.repository}.git`]);\n+          await run(temp, ['fetch', '--depth=1', 'origin', ref]);\n+          await run(temp, ['symbolic-ref', 'HEAD', `refs/heads/${branch}`]);\n+          await rename(temp, target);\n+        } catch (error) { await rm(temp, { recursive: true, force: true }); throw error; }\n+      } else {\n+        await run(target, ['fetch', '--depth=1', 'origin', '+'+ref]);\n+      }\n     }\n     return target;\n   }"
+        }
+      ]
+    },
+    {
+      "sha": "0e97a6a768fe2c041479fb3e8d0fcfb790eb7e84",
+      "message": "fix(ad507): filter repository inventory before applying result cap",
+      "date": "2026-11-02T00:46:30Z",
+      "url": "https://github.com/direcciones507/leveia/commit/0e97a6a768fe2c041479fb3e8d0fcfb790eb7e84",
+      "files": [
+        {
+          "path": "tools/ad507-agent/runtime/engine.mjs",
+          "sha": "96a9e0b6cd1e97283c507cf9245b4b0178358168",
+          "status": "modified",
+          "patch": "@@ -115,9 +115,9 @@ export class Engine {\n     const schema=definition.function.parameters;\n     if(Object.keys(args).some(k=>!Object.hasOwn(schema.properties,k))||schema.required.some(k=>!(k in args))||Object.values(args).some(v=>typeof v!=='string'))throw Error('INVALID_ARGUMENTS');\n     if(name==='list_repository_files'){\n-      const all=await this.w.list(t);const query=['*','**/*','.'].includes(args.query)?'':args.query;\n-      const files=all.filter(path=>path.includes(query));\n-      const result={status:all.length===0?'empty_workspace':files.length?'ok':'no_matches',queryMode:'literal_substring',totalFiles:all.length,matchedCount:files.length,files,\n+      const query=['*','**/*','.'].includes(args.query)?'':args.query;\n+      const files=await this.w.list(t,query);\n+      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:files.length,matchedCount:files.length,files,\n         ...(files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};\n       this.observe(t,'list:'+query,files.length===0);return result;\n     }"
+        }
+      ]
+    },
+    {
+      "sha": "107d8df9938b0f9f8638085f005370f31f98021e",
+      "message": "fix(ad507): skip unavailable sandbox checks for explicit read-only tasks",
+      "date": "2026-11-02T00:56:30Z",
+      "url": "https://github.com/direcciones507/leveia/commit/107d8df9938b0f9f8638085f005370f31f98021e",
+      "files": [
+        {
+          "path": "tools/ad507-agent/runtime/engine.mjs",
+          "sha": "b7e2aa176db33bf0007eccff765a34af73ede3b8",
+          "status": "modified",
+          "patch": "@@ -130,7 +130,7 @@ export class Engine {\n     if(name==='inspect_diff')return this.w.diff(t);\n     if(name==='run_safe_check'){\n       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.\n-      const readOnly=/\\b(?:solo lectura|read.only)\\b/i.test(t.instructions)&&/\\b(?:no modifiques|no modificar|do not modify|no ejecutes pruebas|no remote tests)\\b/i.test(t.instructions);\n+      const readOnly=/(?:solo lectura|read.only|no modifiques|no modificar|do not modify|no ejecutes pruebas|no ejecutar pruebas|no remote tests|sin pruebas|sin modificar)/i.test(t.instructions);\n       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}\n       const result=await this.w.run(t,p,args.check,signal);t.checks.push({...result,revision:t.revision||0,at:new Date().toISOString()});return result;\n     }"
+        }
+      ]
+    },
+    {
+      "sha": "c40cdf7189df50ea9f5d028826d835d2533657b8",
+      "message": "fix(ad507): migrate persisted Mi Contacto branch to verified recovery snapshot",
+      "date": "2026-11-02T01:06:29Z",
+      "url": "https://github.com/direcciones507/leveia/commit/c40cdf7189df50ea9f5d028826d835d2533657b8",
+      "files": [
+        {
+          "path": "tools/ad507-agent/runtime/projects.mjs",
+          "sha": "026a16c4f3492e1c39c0ae40a9ca77891ef80a6d",
+          "status": "modified",
+          "patch": "@@ -23,8 +23,10 @@ export class ProjectRegistry{\n     if(mi){\n       const previous=JSON.parse(mi.data);\n       const configured=c.projects?.['mi-contacto'];\n-      if(previous.repository==='direcciones507/direcciones507'&&configured?.repository==='direcciones507/mi-contacto'&&previous.baseBranch==='main'){\n-        s.db.prepare('UPDATE projects SET data=? WHERE id=?').run(JSON.stringify({...previous,repository:configured.repository}),'mi-contacto');\n+      if(configured?.repository==='direcciones507/mi-contacto' &&\n+        (previous.repository==='direcciones507/direcciones507' || previous.repository===configured.repository) &&\n+        previous.baseBranch==='main' && configured.baseBranch==='recovery/mi-contacto-existing-20261101'){\n+        s.db.prepare('UPDATE projects SET data=? WHERE id=?').run(JSON.stringify({...previous,repository:configured.repository,baseBranch:configured.baseBranch}),'mi-contacto');\n       }\n     }\n     const projects=Object.create(null);for(const row of s.db.prepare('SELECT id,data FROM projects ORDER BY rowid').all())projects[row.id]=normalizeProject(row.id,JSON.parse(row.data),c.env);"
+        }
+      ]
+    },
+    {
+      "sha": "4d00cae250ed713fe6a26190a1233ff4969291d9",
+      "message": "fix(ad507): allow read-only reports when sandbox unavailable without waiving code checks",
+      "date": "2026-11-02T01:13:07Z",
+      "url": "https://github.com/direcciones507/leveia/commit/4d00cae250ed713fe6a26190a1233ff4969291d9",
+      "files": [
+        {
+          "path": "tools/ad507-agent/runtime/engine.mjs",
+          "sha": "8eec3dccc02bb3d0a992ae4fb388bacbce3cca22",
+          "status": "modified",
+          "patch": "@@ -132,7 +132,15 @@ export class Engine {\n       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.\n       const readOnly=/(?:solo lectura|read.only|no modifiques|no modificar|do not modify|no ejecutes pruebas|no ejecutar pruebas|no remote tests|sin pruebas|sin modificar)/i.test(t.instructions);\n       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}\n-      const result=await this.w.run(t,p,args.check,signal);t.checks.push({...result,revision:t.revision||0,at:new Date().toISOString()});return result;\n+      let result;\n+      try { result=await this.w.run(t,p,args.check,signal); }\n+      catch(error){\n+        if(error.message!=='SANDBOX_NOT_AVAILABLE')throw error;\n+        const changed=await this.w.diff(t);\n+        if(changed.length>0)throw error; // Never waive the check gate for modified code.\n+        return {check:args.check,passed:false,skipped:true,reason:'SANDBOX_NOT_AVAILABLE_READ_ONLY',hint:'Sandbox is unavailable and no files changed. Finish with a read-only report; code edits require isolated checks.'};\n+      }\n+      t.checks.push({...result,revision:t.revision||0,at:new Date().toISOString()});return result;\n     }\n     throw Error('TOOL_NOT_AUTHORIZED');\n   }"
+        }
+      ]
+    }
+  ]
+}

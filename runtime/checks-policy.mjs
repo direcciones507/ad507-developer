@@ -1,5 +1,7 @@
 // Commands are owned by the controller/workflow, never supplied by a prompt or payload.
 export const checkCommands = Object.freeze({
+  'standalone-agent-test': ['node','--test','runtime/*.test.mjs','src/*.test.ts'],
+  'project-test': ['npm','test','--ignore-scripts'],
   'project-syntax': ['node','/opt/ad507-project-check.mjs'],
   'agent-test': ['node', '--test', 'tools/ad507-agent/runtime/*.test.mjs'],
   'agent-typecheck': ['pnpm', '--filter', '@ad507/technology-agent', 'typecheck'],

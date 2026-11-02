@@ -4,6 +4,8 @@ import { actionablePolicyText } from '../src/actionable-policy-text.ts';
 import { tools, validateToolSequence } from './provider.mjs';
 import { engineeringInstructions } from '../src/agents.ts';
 const terminal=new Set(['completed','failed','cancelled']);
+export const readOnlyTask = instructions => /\b(?:solo lectura|read.only|sin modificar archivos|sin modificar el c[oó]digo|do not modify (?:any )?(?:files|code))\b/i.test(instructions)
+  || /(?:^|[.;\n])\s*(?:no modifi(?:ques|car)(?: (?:archivos|el c[oó]digo))?|no ejecutes pruebas|no ejecutar pruebas|no remote tests)\s*(?:[.;\n]|$)/i.test(instructions);
 export class Engine {
   constructor(config,store,workspace,provider,publisher){Object.assign(this,{c:config,s:store,w:workspace,provider,publisher});this.active=new Map();}
   create({project,instructions,budget,provider}){
@@ -12,6 +14,7 @@ export class Engine {
     if(/(?:sk-[a-zA-Z0-9_-]{16,}|-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,})/.test(instructions))throw Error('DO_NOT_SUBMIT_SECRETS');
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
+    if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
     const cap=budget??Math.min(p.taskCap,p.projectCap);
     if(!Number.isSafeInteger(cap)||cap<=0||cap>p.taskCap||cap>p.projectCap)throw Error('INVALID_BUDGET');
     if(this.s.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN ('completed','failed','cancelled')").get().n>=100)throw Error('QUEUE_FULL');
@@ -56,6 +59,8 @@ export class Engine {
     try{
       const p=projectFor(this.c,t.project);if(t.provider!==this.c.provider)throw Error('PROVIDER_CONFIGURATION_CHANGED');
       if(t.phase!=='publish'&&!providerReady(this.c))throw Error('PROVIDER_NOT_CONFIGURED');
+      // Do not spend model budget on edits that cannot be verified. No host fallback.
+      if(t.phase!=='publish'&&t.provider!=='simulation'&&p.mode==='development'&&!readOnlyTask(t.instructions))await this.w.checkAvailability();
       t.state='running';this.s.save(t);this.s.event(t.id,'worker_started',{phase:t.phase});
       if(t.phase==='workspace'){
         t.inflight={kind:'workspace'};this.s.save(t);await this.w.prepare(t,p);t.inflight=null;t.phase='model';
@@ -110,27 +115,34 @@ export class Engine {
   }
   checkpoint(t){const current=this.s.get(t.id);if(['paused','cancelled','awaiting_approval'].includes(current.state)){t.state=current.state;t.gate=current.gate;t.reason=current.reason;}this.s.save(t);}
   async execute(t,p,call,signal){
+    if(t.project!==p.id||projectFor(this.c,t.project).repository!==p.repository)throw Error('PROJECT_NOT_AUTHORIZED');
     const name=call.function?.name;const definition=tools.find(t=>t.function.name===name);if(!definition)throw Error('TOOL_NOT_AUTHORIZED');
     const args=JSON.parse(call.function.arguments);if(!args||typeof args!=='object'||Array.isArray(args))throw Error('INVALID_ARGUMENTS');
     const schema=definition.function.parameters;
     if(Object.keys(args).some(k=>!Object.hasOwn(schema.properties,k))||schema.required.some(k=>!(k in args))||Object.values(args).some(v=>typeof v!=='string'))throw Error('INVALID_ARGUMENTS');
     if(name==='list_repository_files'){
       const query=['*','**/*','.'].includes(args.query)?'':args.query;
-      const files=await this.w.list(t,query);
-      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:files.length,matchedCount:files.length,files,
+      const inventory=await this.w.list(t,'');
+      const files=query?inventory.filter(path=>path.includes(query)):inventory;
+      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:inventory.length,matchedCount:files.length,inventoryLimit:3000,possiblyTruncated:inventory.length===3000,files,
         ...(files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};
       this.observe(t,'list:'+query,files.length===0);return result;
     }
     if(name==='read_repository_file'){
+      if(t.observationRevision===(t.revision||0)&&t.observationCounts?.['read:'+args.path]){
+        this.observe(t,'read:'+args.path,false);
+        return {status:'already_read',path:args.path,revision:t.revision||0,hint:'Use the earlier tool result. The file has not changed; do not request it again.'};
+      }
       try{const content=await this.w.read(t,args.path);this.observe(t,'read:'+args.path,false);return content;}
       catch(error){if(error.message!=='FILE_NOT_FOUND')throw error;this.observe(t,'missing:'+args.path,true);return {status:'not_found',hint:'File does not exist in this task checkout. List files with query empty string; do not guess paths.'};}
     }
+    if(['write_repository_file','replace_repository_text'].includes(name)&&readOnlyTask(t.instructions))throw Error('READ_ONLY_TASK');
     if(name==='write_repository_file'){const result=await this.w.write(t,p,args.path,args.content);t.revision=(t.revision||0)+1;t.noProgress=false;return result;}
     if(name==='replace_repository_text'){const result=await this.w.replace(t,p,args.path,args.oldText,args.newText);if(!result?.error){t.revision=(t.revision||0)+1;t.noProgress=false;}return result;}
     if(name==='inspect_diff')return this.w.diff(t);
     if(name==='run_safe_check'){
       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.
-      const readOnly=/(?:solo lectura|read.only|no modifiques|no modificar|do not modify|no ejecutes pruebas|no ejecutar pruebas|no remote tests|sin pruebas|sin modificar)/i.test(t.instructions);
+      const readOnly=readOnlyTask(t.instructions);
       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}
       let result;
       try { result=await this.w.run(t,p,args.check,signal); }

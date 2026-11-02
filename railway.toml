@@ -1,14 +1,10 @@
-# Select explicitly for the isolated AD507 service in existing leveia-staging project.
-# No production app, shared variables or database is changed.
+# Configure only the existing ad507-developer service.
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "tools/ad507-agent/Dockerfile"
+dockerfilePath = "Dockerfile"
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 numReplicas = 1
-# Dedicated /data volume required. Entry point initializes /data/ad507 then drops to UID 1000.
-# AD507_CHECK_BACKEND=github-actions removes the need for a Railway Docker daemon.
-# Set owner password hash and HTTPS origin before activation; no default login exists.

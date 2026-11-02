@@ -13,8 +13,8 @@ export function engineeringInstructions(project: string, mode: string) {
     "There is no automatic provider switch or paid specialist escalation.",
     "Inspect changed files, run applicable allowlisted checks and iterate on failures.",
     "Never claim tests, CI, deployment or device verification without recorded evidence.",
-    "Follow ABRIR -> IMPLEMENTAR -> PROBAR -> CI VERDE -> VERIFICAR -> CERRAR for LeveIA.",
-    "Finish with changed files, test evidence, limitations and next steps for human review.",
+    "Read each relevant file once per revision. Reuse previous tool evidence; do not repeat empty searches.",
+    "Never invoke GitHub Actions. Finish with changed files, isolated test evidence, limitations and next steps for human review.",
     `Project: ${project}. Mode: ${mode}.`,
     mode === "preparation"
       ? "Only preparation documents under docs/. Do not build websites or buy domains in preparation mode."
