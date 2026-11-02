@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.env*
+**/*secret*
+**/*credential*
+**/*.pem
+**/*.key
+**/*.p12
+**/ad507-data
+**/developer.sqlite*
+**/runtime-leader.sqlite*

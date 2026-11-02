@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { SourceCache } from './source-cache.mjs';
+import { loadConfig } from './config.mjs';
+import { linkDependencies } from './sandbox-dependencies.mjs';
+const exec=promisify(execFile);
+test('source bootstrap/fetch is limited to LEVEIA main, with credentials only in subprocess environment',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'ad507-source-'));t.after(()=>rm(root,{recursive:true,force:true}));const calls=[];
+  const c=loadConfig({AD507_DATA_DIR:root,AD507_SOURCE_GITHUB_TOKEN:'private-fixture-token'});const cache=new SourceCache(c,async(command,args,options)=>{calls.push({command,args,options});if(args.includes('fetch'))return {stdout:'',stderr:''};return exec(command,args,options);});
+  const source=await cache.ensure(c.projects.leveia);const config=await readFile(join(source,'config'),'utf8');
+  assert.match(config,/https:\/\/github.com\/direcciones507\/leveia.git/);assert.equal(config.includes('private-fixture-token'),false);
+  assert.equal(calls.some(c=>c.args.join(' ').includes('private-fixture-token')),false);assert.equal(calls.filter(c=>c.args.includes('fetch'))[0].args.at(-1),'refs/heads/main:refs/heads/main');
+  await cache.ensure(c.projects.leveia);assert.equal(calls.filter(c=>c.args.includes('fetch')).length,2);
+  await assert.rejects(cache.ensure({id:'anything',repository:'direcciones507/anything'}),/NOT_AUTHORIZED/);
+  await assert.rejects(new SourceCache({...c,sourceToken:undefined}).ensure(c.projects.leveia),/TOKEN_REQUIRED/);
+});
+test('sandbox dependencies reuse third-party packages but workspace links target the changed snapshot',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'ad507-dependencies-'));t.after(()=>rm(root,{recursive:true,force:true}));const template=join(root,'template'),work=join(root,'work');
+  await mkdir(join(template,'node_modules','.pnpm','vendor','node_modules','vendor'),{recursive:true});await mkdir(join(template,'node_modules','@leveia'),{recursive:true});
+  await mkdir(join(template,'packages','shared'),{recursive:true});await mkdir(join(work,'packages','shared'),{recursive:true});
+  await writeFile(join(template,'packages','shared','value'),'baseline');await writeFile(join(work,'packages','shared','value'),'modified');
+  await symlink('.pnpm/vendor/node_modules/vendor',join(template,'node_modules','vendor'));await symlink('../../packages/shared',join(template,'node_modules','@leveia','shared'));
+  await linkDependencies(template,work);
+  assert.equal(await realpath(join(work,'node_modules','vendor')),join(template,'node_modules','.pnpm','vendor','node_modules','vendor'));
+  assert.equal(await readFile(join(work,'node_modules','@leveia','shared','value'),'utf8'),'modified');
+});
+test('a shallow authenticated-source cache produces a real independent task checkout',async t=>{
+ const {loadConfig}=await import('./config.mjs');const {Workspace,git}=await import('./workspace.mjs');const {Store}=await import('./store.mjs');
+ const root=await mkdtemp(join(tmpdir(),'ad507-shallow-'));t.after(()=>rm(root,{recursive:true,force:true}));const upstream=join(root,'upstream');await mkdir(upstream);
+ await git(upstream,['init','-b','main']);await writeFile(join(upstream,'README.md'),'fresh main');await git(upstream,['add','.']);await git(upstream,['-c','user.name=test','-c','user.email=test@example.com','commit','-m','fixture']);
+ const c=loadConfig({AD507_DATA_DIR:join(root,'data'),AD507_SOURCE_MODE:'github',AD507_SOURCE_GITHUB_TOKEN:'fixture-token',AD507_PROVIDER:'simulation'});const s=new Store(c.root);t.after(()=>s.close());
+ const cache=new SourceCache(c,async(command,args,options)=>args.includes('fetch')?exec('git',['-c','protocol.file.allow=always','fetch','--depth=1',`file://${upstream}`,'+refs/heads/main:refs/heads/main'],options):exec(command,args,options));
+ const w=new Workspace(c);w.sources=cache;const task=s.create('leveia','shallow fixture',100,'simulation');await w.prepare(task,c.projects.leveia);
+ assert.equal(await w.read(task,'README.md'),'fresh main');assert.equal(await git(upstream,['branch','--show-current']),'main');assert.match(task.branch,/^ad507\/task-/);
+});

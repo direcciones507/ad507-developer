@@ -1,0 +1,7 @@
+node_modules/
+dist/
+ad507-data/
+.env
+.env.*
+!.env.example
+*.sqlite*

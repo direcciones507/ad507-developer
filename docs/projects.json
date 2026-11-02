@@ -1,0 +1,59 @@
+{
+  "version": 3,
+  "agent": "AD507 Technology Agent",
+  "operationalName": "AD507 Developer",
+  "projects": {
+    "junta-comunal-santiago": {
+      "name": "Junta Comunal de Santiago",
+      "enabled": true,
+      "mode": "preparation",
+      "repository": null,
+      "productionWrite": false,
+      "mergeMain": false
+    },
+    "leveia": {
+      "name": "LEVEIA",
+      "repository": "direcciones507/leveia",
+      "enabled": true,
+      "mode": "development",
+      "productionWrite": false,
+      "mergeMain": false
+    },
+    "direcciones507": {
+      "name": "Direcciones 507/LATAM",
+      "enabled": true,
+      "mode": "development",
+      "repository": "direcciones507/direcciones507",
+      "baseBranch": "main",
+      "productionWrite": false,
+      "mergeMain": false
+    },
+    "reportapa": {
+      "name": "ReportaPA",
+      "enabled": true,
+      "mode": "development",
+      "repository": "direcciones507/Reportapa",
+      "baseBranch": "main",
+      "productionWrite": false,
+      "mergeMain": false
+    },
+    "empleos-pa": {
+      "name": "Empleos.pa",
+      "enabled": true,
+      "mode": "development",
+      "repository": "direcciones507/Empleos-pa",
+      "baseBranch": "main",
+      "productionWrite": false,
+      "mergeMain": false
+    },
+    "mi-contacto": {
+      "name": "Mi Contacto",
+      "enabled": true,
+      "mode": "development",
+      "repository": "direcciones507/mi-contacto",
+      "baseBranch": "recovery/mi-contacto-existing-20261101",
+      "productionWrite": false,
+      "mergeMain": false
+    }
+  }
+}

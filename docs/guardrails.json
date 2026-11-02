@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "defaultMode": "least-privilege",
+  "allowedWithoutApproval": [
+    "read_repository",
+    "inspect_history",
+    "create_task_branch",
+    "edit_task_branch",
+    "run_non_destructive_checks",
+    "prepare_pull_request"
+  ],
+  "requiresHumanApproval": [
+    "merge_main",
+    "production_deploy",
+    "production_config_change",
+    "dns_change",
+    "destructive_database_operation",
+    "credential_or_secret_change",
+    "paid_limit_increase",
+    "extraordinary_spend",
+    "sensitive_access_expansion"
+  ],
+  "neverClaimWithoutEvidence": [
+    "ci_green",
+    "production_verified",
+    "physical_test_passed",
+    "fully_closed"
+  ]
+}

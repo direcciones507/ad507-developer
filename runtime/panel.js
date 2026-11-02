@@ -1,0 +1,48 @@
+'use strict';
+const $=id=>document.getElementById(id);let csrf='',selected=null,status=null,busy=false;
+const labels={pending:'Pendiente',running:'Ejecutando',paused:'Pausado',awaiting_approval:'Esperando aprobación',completed:'Completado',failed:'Fallido',cancelled:'Cancelado'};
+const money=n=>'$'+(n/1000000).toFixed(4);
+async function api(path,method='GET',data){const r=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data?JSON.stringify(data):undefined});const json=await r.json();if(!r.ok){if(r.status===401){$('app').hidden=true;$('login').hidden=false;$('logout').hidden=true;}throw Error(json.error||'REQUEST_FAILED');}return json;}
+function node(tag,text){const el=document.createElement(tag);el.textContent=text;return el;}
+function showError(e){$('message').textContent=e.message==='PROJECT_SELECTION_MISMATCH'?'El proyecto seleccionado no está vinculado al repositorio indicado. Selecciona la opción que muestra su repositorio GitHub.':e.message;}
+function projectInfo(){const p=status.projects.find(p=>p.id===$('project').value);if(!p)return;$('scope').textContent=p.mode==='preparation'?'Preparación y documentación. La web aún no se construye.':`Repositorio ${p.repository}. Espacio aislado ${p.sourceReady?'configurado':'pendiente de aprovisionar'}.`;$('project-budget').textContent=`Reserva del proyecto: ${money(p.reserved)} / ${money(p.budget)}. Las reservas interrumpidas no se reembolsan automáticamente.`;}
+async function refresh(){
+  status=await api('status');csrf=status.csrf;$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;
+  $('provider').textContent=`Proveedor: ${status.provider}${status.provider==='simulation'?' · SIMULACIÓN':''}`;$('readiness').textContent=status.provider==='simulation'?'Modo de prueba: sin llamadas a modelos externos.':status.ready?'Integración configurada; la prueba real debe verificarse.':'Inferencia detenida: faltan credencial o configuración autorizada.';
+  $('runner-status').textContent=status.checkBackend==='github-actions'?`Pruebas en GitHub Actions: ${status.remote?.ready?'configuradas':'detenidas hasta configurar acceso y confirmar minutos incluidos'}. Reserva: ${status.remote?.minutesReserved||0} / ${status.remote?.minutesLimit||0} minutos.`:'Pruebas en contenedor local.';
+  const previous=$('project').value;
+  const successor=p=>p.mode==='preparation'&&!p.repository?status.projects.find(other=>other.mode==='development'&&other.repository&&other.name.startsWith(p.name)):null;
+  const preferred=status.projects.find(p=>successor(p));
+  $('project').replaceChildren();for(const p of status.projects){const archived=successor(p);const o=node('option',archived?`Histórico de preparación · ${p.name}`:p.name||p.id);o.value=p.id;o.disabled=Boolean(archived);$('project').append(o);}
+  const previousProject=status.projects.find(p=>p.id===previous);
+  if(previousProject)$('project').value=successor(previousProject)?.id||previous;
+  else if(preferred)$('project').value=successor(preferred).id;
+  projectInfo();
+  const tasks=await api('tasks');$('tasks').replaceChildren();if(!tasks.length)$('tasks').append(node('p','Todavía no hay trabajos.'));
+  for(const t of tasks){const b=node('button',`${labels[t.state]} · ${t.project}`);b.className='task';b.append(node('small',t.instructions.slice(0,100)));b.addEventListener('click',()=>detail(t.id).catch(showError));$('tasks').append(b);}
+  if(selected)await detail(selected);
+}
+async function detail(id){if(selected!==id){$('file-content').hidden=true;$('file-content').textContent='';}selected=id;const t=await api('tasks/'+id);$('detail').hidden=false;$('task-title').textContent=t.project+' · '+id.slice(0,8);$('task-state').textContent=labels[t.state];$('task-reason').textContent=t.reason||'';
+  $('controls').replaceChildren();let actions=[];if(['pending','running'].includes(t.state))actions.push(['pause','Pausar']);if(t.state==='paused')actions.push(['resume','Reanudar']);if(t.state==='awaiting_approval'&&t.gate!=='scope')actions.push(['approve',t.gate==='recovery'?'Revisé la interrupción; continuar':'Aprobar entrega'],['reject','Rechazar']);if(!['completed','failed','cancelled'].includes(t.state))actions.push(['cancel','Cancelar']);
+  for(const [action,label]of actions){const b=node('button',label);b.className=['cancel','reject'].includes(action)?'danger':'secondary';b.addEventListener('click',async()=>{b.disabled=true;try{await api('tasks/'+id+'/control','POST',{action});await refresh();}catch(e){showError(e);}finally{b.disabled=false;}});$('controls').append(b);}
+  $('metrics').replaceChildren();for(const [label,value]of [['Rama',t.branch||'Por crear'],['Reserva / límite',money(t.reserved)+' / '+money(t.budget)],['Pasos',t.steps],['Tokens entrada',t.usage.input],['Tokens salida',t.usage.output],['Etapa',t.phase],['Paso interrumpido',t.interrupted?.name||t.interrupted?.kind||'Ninguno']]){const d=node('div','');d.append(node('dt',label),node('dd',String(value)));$('metrics').append(d);}
+  $('summary').textContent=t.summary||'Entrega pendiente.';$('pr').replaceChildren();if(t.delivery?.url?.startsWith('https://github.com/')){const a=node('a','Abrir PR para revisión');a.href=t.delivery.url;a.target='_blank';a.rel='noopener noreferrer';$('pr').append(a);}
+  $('checks').replaceChildren();if(!t.checks.length)$('checks').append(node('p','Sin pruebas de código ejecutadas en esta tarea.'));for(const check of t.checks){const d=node('details','');d.append(node('summary',`${check.check}: ${check.passed?'APROBADA':'FALLIDA'} · ${check.at||''}`),node('pre',check.output||'Sin salida'));$('checks').append(d);}
+  $('remote-checks').replaceChildren();for(const check of t.remoteChecks||[]){const row=node('p',`${check.check}: ${check.state} · ${check.minutesReserved} min reservados `);if(check.runUrl?.startsWith('https://github.com/direcciones507/leveia/actions/runs/')){const link=node('a','Ver ejecución');link.href=check.runUrl;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}$('remote-checks').append(row);}
+  $('files').replaceChildren();for(const path of t.files){const b=node('button',path);b.className='secondary';b.addEventListener('click',async()=>{try{const f=await api(`tasks/${id}/file?path=${encodeURIComponent(path)}`);$('file-content').hidden=false;$('file-content').textContent=f.content;}catch(e){showError(e);}});$('files').append(b);}
+  const events=await api('tasks/'+id+'/events');$('events').replaceChildren();for(const event of events)$('events').append(node('li',`${event.created} · ${event.kind} · ${JSON.stringify(event.detail)}`));
+}
+$('toggle-password').addEventListener('click',()=>{const input=$('password');const visible=input.type==='password';input.type=visible?'text':'password';$('toggle-password').textContent=visible?'🙈 Ocultar contraseña':'👁️ Mostrar contraseña';$('toggle-password').setAttribute('aria-label',visible?'Ocultar contraseña':'Mostrar contraseña');$('toggle-password').setAttribute('aria-pressed',String(visible));});
+$('check-hash').addEventListener('click',async()=>{
+  const field=$('hash-check'),button=$('check-hash'),out=$('hash-result');
+  const hash=field.value.trim();field.value='';out.textContent='Comprobando…';button.disabled=true;
+  try{const result=await api('auth/hash-check','POST',{hash});out.textContent=result.matches?'COINCIDE: Railway utiliza este código.':'NO COINCIDE: Railway utiliza otro código. No cambies tu contraseña.';}
+  catch(err){out.textContent=err.message==='HASH_FORMAT_INVALID'?'Código incompleto o formato incorrecto.':err.message==='CHECK_RATE_LIMIT'?'Demasiadas comprobaciones. Espera 15 minutos.':err.message;}
+  finally{button.disabled=false;}
+});
+$('login-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('login','POST',{password:$('password').value});$('password').value='';csrf=r.csrf;$('message').textContent='';await refresh();}catch(err){showError(err);}});
+$('task-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const t=await api('tasks','POST',{project:$('project').value,instructions:$('instructions').value,budget:Math.round(Number($('budget').value)*1000000)});$('instructions').value='';selected=t.id;$('message').textContent='';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
+$('project-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('projects','POST',{id:$('project-id').value,name:$('project-name').value,repository:$('project-repo').value||null,baseBranch:$('project-base').value,mode:$('project-mode').value,authorize:$('project-consent').checked});$('project-form').reset();$('message').textContent='Proyecto autorizado y guardado. Configura su acceso GitHub por separado.';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
+$('project').addEventListener('change',projectInfo);$('logout').addEventListener('click',async()=>{try{await api('logout','POST',{});location.reload();}catch(e){showError(e);}});
+refresh().catch(e=>{if(e.message!=='AUTHENTICATION_REQUIRED')showError(e);});
+setInterval(async()=>{if(document.hidden||busy||$('app').hidden)return;busy=true;try{await refresh();}catch(e){showError(e);}finally{busy=false;}},3000);

@@ -1,0 +1,29 @@
+{
+  "status": "STAGED_ONLY_NOT_ACTIVATED",
+  "projectId": "1b44bc7e-db12-4ea6-9955-70c4ce68aed3",
+  "projectName": "leveia-staging",
+  "environmentId": "b8391221-bfd2-41eb-a4fa-c3f10dea8044",
+  "environmentName": "production",
+  "serviceId": "419d5122-4e9c-42f9-9b27-3a6bfaee2ae5",
+  "serviceName": "ad507-developer",
+  "volumeId": "ff3de8a0-a8b7-4c90-86d3-722270139397",
+  "volumeName": "ad507-developer-data",
+  "volumeSizeMB": 1000,
+  "mountPath": "/data",
+  "stagedPatchId": "160fbbcf-e5cf-46f8-a46e-94de20562165",
+  "sourceBranch": "ad507/task-developer-runtime",
+  "configFile": "tools/ad507-agent/railway.toml",
+  "dockerfile": "tools/ad507-agent/Dockerfile",
+  "requestedLimits": {"memoryGB": 0.5, "vCPUs": 0.25, "replicas": 1},
+  "instanceSettingsStatus": "PENDING: update_service rejects staged-only service with Service instance not found; apply limits/config/healthcheck before activating a running deployment",
+  "safeBuildFallback": "RAILWAY_DOCKERFILE_PATH is already staged; no production app config is changed",
+  "requiredBeforeOperation": [
+    "Owner approval for dedicated billable compute and volume",
+    "Apply instance settings and verify only agent resources are in the staged patch",
+    "Owner password hash and HTTPS Railway service domain/origin",
+    "Repo-limited GitHub token(s) and AD507_CONTROLLER_ORIGIN repository variable",
+    "Owner confirmation of included Actions minutes and spending stop; monthly quota remains zero until confirmed",
+    "DeepSeek secret/model/pricing for actual inference",
+    "Verify public dispatch, complete first real mission and PR; CI is not operation"
+  ]
+}
