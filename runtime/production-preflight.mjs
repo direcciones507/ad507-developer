@@ -8,9 +8,9 @@ export function assessCutover(c, {volumePresent=false, backupVerified=false, exe
   const checks=[
     ['persistent-volume',volumePresent,'Existing persistent data directory must be mounted'],
     ['backup',backupVerified,'Restore-tested private backup of current volume required'],
-    ['owner-login',Boolean(c.ownerHash&&c.ownerEmail),'Owner email and password hash must be configured'],
+    ['owner-login',/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(c.ownerHash||'')&&(!c.ownerEmail||/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(c.ownerEmail)),'Valid owner password hash required; email optional'],
     ['public-origin',/^https:\/\//.test(c.origin),'HTTPS public origin required'],
-    ['provider',Boolean(c.apiKey&&c.provider==='deepseek'&&c.inputRate>0&&c.outputRate>0),'DeepSeek and positive token prices required'],
+    ['provider',Boolean(c.live&&c.apiKey&&c.model&&c.provider==='deepseek'&&c.inputRate>0&&c.outputRate>0),'Live DeepSeek, model and positive token prices required'],
     ['isolated-executor',executorVerified,'Real sandbox execution must be independently verified'],
   ];
   return {ready:checks.every(([,ok])=>ok),checks:checks.map(([id,passed,reason])=>({id,passed,reason}))};
