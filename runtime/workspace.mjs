@@ -44,7 +44,7 @@ export class Workspace {
     }else{
       if(p.mode!=='preparation')throw Error('PROJECT_SOURCE_REQUIRED');
       await mkdir(root,{mode:0o700});await git(root,['init','-b','main']);
-      await git(root,['-c','user.name=AD507 Developer','-c','user.email=ad507-agent@users.noreply.github.com','commit','--allow-empty','-m','Initialize isolated preparation workspace']);
+      await git(root,['-c','user.name=AS Developer','-c','user.email=ad507-agent@users.noreply.github.com','commit','--allow-empty','-m','Initialize isolated preparation workspace']);
     }
     t.base=await git(root,['rev-parse','HEAD']);t.branch=`ad507/task-${t.id}`;
     if(!TASK_BRANCH.test(t.branch))throw Error('INVALID_TASK_BRANCH');
