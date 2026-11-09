@@ -76,6 +76,19 @@ export class Store {
       return row.amount;
     });
   }
+  resetOldWork(){
+    return this.tx(()=>{
+      const active=this.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state IN ('running','pending')").get().n;
+      if(active)throw Error('ACTIVE_TASKS_MUST_FINISH_FIRST');
+      this.db.exec("CREATE TABLE IF NOT EXISTS archived_budget_resets(id TEXT PRIMARY KEY, created TEXT NOT NULL, snapshot TEXT NOT NULL)");
+      const id=randomUUID();
+      const snapshot={tasks:this.db.prepare('SELECT * FROM tasks').all(),events:this.db.prepare('SELECT * FROM events').all(),reservations:this.db.prepare('SELECT * FROM reservations').all(),budgets:this.db.prepare('SELECT * FROM budgets').all()};
+      this.db.prepare('INSERT INTO archived_budget_resets VALUES(?,?,?)').run(id,new Date().toISOString(),JSON.stringify(snapshot));
+      this.db.exec('DELETE FROM reservations; DELETE FROM budgets; DELETE FROM tasks; DELETE FROM events;');
+      this.event(null,'owner_archived_old_work_and_reset_budget',{archiveId:id,taskCount:snapshot.tasks.length,reservationCount:snapshot.reservations.length,previousReserved:snapshot.budgets.reduce((sum,b)=>sum+b.reserved,0)});
+      return {ok:true,archiveId:id,archivedTasks:snapshot.tasks.length,archivedReservations:snapshot.reservations.length,reserved:0};
+    });
+  }
   globalBudgetLimit(fallback){const row=this.db.prepare("SELECT value FROM settings WHERE key='global_budget_micro_usd'").get();const value=row?Number(row.value):fallback;if(!Number.isSafeInteger(value)||value<1)throw Error('INVALID_GLOBAL_BUDGET');return value;}
   setGlobalBudgetLimit(amount,baseline){
     if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
