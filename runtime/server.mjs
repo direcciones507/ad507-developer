@@ -74,10 +74,15 @@ export function createApp(c,s,e){
         try{await e.w.checkAvailability();return send(200,{ready:true,backend:c.checkBackend,remote:c.checkBackend==='github-actions'?{minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null});}
         catch(error){return send(200,{ready:false,backend:c.checkBackend,reason:error.message==='ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED'?'ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED':'ISOLATED_EXECUTOR_UNAVAILABLE'});}
       }
+      if(req.method==='POST'&&path==='/api/budget/limit'){
+        const usd=body.usd,amount=typeof usd==='number'?Math.round(usd*1000000):NaN;
+        if(!Number.isFinite(usd)||!Number.isSafeInteger(amount)||Math.abs(amount/1000000-usd)>0.0000001||body.confirm!=='AUTORIZO')return send(400,{error:'BUDGET_CONFIRMATION_REQUIRED'});
+        return send(200,s.setGlobalBudgetLimit(amount,c.globalCap));
+      }
       if(req.method==='GET'&&path==='/api/budget/audit')return send(200,s.budgetAudit());
       if(req.method==='GET'&&path==='/api/status')return send(200,{csrf:session.csrf,provider:c.provider,ready:providerReady(c),live:c.live,publishing:c.publishing,checkBackend:c.checkBackend||'local-docker',sourceMode:c.sourceMode||'manual',
         remote:e.w.remote?{ready:e.w.remote.ready(),minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null,
-        budget:{reserved:s.globalUsage(),limit:c.globalCap},projects:Object.values(c.projects).filter(p=>p.enabled).map(p=>({id:p.id,name:p.name,mode:p.mode,repository:p.repository,baseBranch:p.baseBranch,checks:p.checks,sourceReady:!!p.source||p.mode==='preparation'||Boolean(c.sourceMode==='github'&&projectToken(c,p)),budget:p.projectCap,reserved:s.projectUsage(p.id),taskCap:p.taskCap}))});
+        budget:{reserved:s.globalUsage(),limit:s.globalBudgetLimit(c.globalCap)},projects:Object.values(c.projects).filter(p=>p.enabled).map(p=>({id:p.id,name:p.name,mode:p.mode,repository:p.repository,baseBranch:p.baseBranch,checks:p.checks,sourceReady:!!p.source||p.mode==='preparation'||Boolean(c.sourceMode==='github'&&projectToken(c,p)),budget:p.projectCap,reserved:s.projectUsage(p.id),taskCap:p.taskCap}))});
       if(path==='/api/projects'&&req.method==='POST'){if(!c.registry)throw Error('PROJECT_REGISTRY_UNAVAILABLE');const p=c.registry.register(body);return send(201,{id:p.id,name:p.name,repository:p.repository,mode:p.mode,baseBranch:p.baseBranch});}
       if(path==='/api/tasks'&&req.method==='GET')return send(200,s.list().map(publicTask));
       if(path==='/api/tasks'&&req.method==='POST')return send(201,publicTask(e.create(body)));
