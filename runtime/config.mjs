@@ -13,8 +13,7 @@ export function loadConfig(env=process.env) {
   const globalCap=Number(env.AD507_BUDGET_MICROUSD||1000000);
   if(!Number.isSafeInteger(globalCap)||globalCap<1)throw Error('INVALID_GLOBAL_BUDGET');
   const checkBackend=env.AD507_CHECK_BACKEND||'local-docker';
-  if(checkBackend==='github-actions')throw Error('GITHUB_ACTIONS_DISABLED');
-  if(checkBackend!=='local-docker')throw Error('INVALID_CHECK_BACKEND');
+  if(!['local-docker','github-actions'].includes(checkBackend))throw Error('INVALID_CHECK_BACKEND');
   return {root,projects,provider,globalCap,checkBackend,sourceMode:env.AD507_SOURCE_MODE||'manual',
     sourceToken:env.AD507_SOURCE_GITHUB_TOKEN||env.AD507_GITHUB_TOKEN||env.AD507_ACTIONS_GITHUB_TOKEN,
     actionsToken:env.AD507_ACTIONS_GITHUB_TOKEN||env.AD507_GITHUB_TOKEN,
