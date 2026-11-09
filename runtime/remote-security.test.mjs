@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareRemote, executeRemote } from './remote-runner.mjs';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,5 +37,21 @@ test('remote runner rejects mismatched execution identity before Docker or netwo
       execute:async()=>{calls++;throw Error('DOCKER_MUST_NOT_BE_CALLED');}
     }),/RUNNER_IDENTITY_REJECTED/);
     assert.equal(calls,0);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('remote runner rejects corrupted compressed snapshot before writing files',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'as-developer-corrupt-'));
+  let calls=0;
+  try{
+    const fetchImpl=async url=>{
+      calls++;
+      if(url.endsWith('/claim'))return new Response(JSON.stringify({expectedSHA:identity.sha,snapshotHash:'c'.repeat(64),check:'typecheck'}),{status:200});
+      if(url.endsWith('/snapshot'))return new Response(Buffer.from('not-a-gzip-snapshot'),{status:200});
+      throw Error('UNEXPECTED_NETWORK_CALL');
+    };
+    await assert.rejects(prepareRemote({origin:'https://controller.example',id,ticket,identity,directory,fetchImpl}));
+    assert.equal(calls,2);
+    await assert.rejects(readFile(join(directory,'context.json')),{code:'ENOENT'});
   }finally{await rm(directory,{recursive:true,force:true});}
 });
