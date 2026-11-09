@@ -28,7 +28,8 @@ test('production activation needs explicit flags, credentials and rates',()=>{
 
 test('unreviewed execution backends and providers are rejected',()=>{
   assert.throws(()=>loadConfig({AD507_PROVIDER:'untrusted'}),/DEEPSEEK_ONLY/);
-  assert.throws(()=>loadConfig({AD507_PROVIDER:'simulation',AD507_CHECK_BACKEND:'github-actions'}),/GITHUB_ACTIONS_DISABLED/);
+  assert.equal(loadConfig({AD507_PROVIDER:'simulation',AD507_CHECK_BACKEND:'github-actions'}).checkBackend,'github-actions');
+  assert.throws(()=>loadConfig({AD507_CHECK_BACKEND:'unsafe-host'}),/INVALID_CHECK_BACKEND/);
 });
 
 test('disabled live inference never invokes paid provider or reserves a charge',async t=>{
