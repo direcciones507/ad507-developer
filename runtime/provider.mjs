@@ -52,7 +52,8 @@ export class Provider {
     const choice=json.choices?.[0];
     if(choice?.finish_reason&&!['stop','tool_calls'].includes(choice.finish_reason))throw Error('PROVIDER_INCOMPLETE_RESPONSE');
     const message=choice?.message;
-    if(!message||(!message.tool_calls&&!message.content))throw Error('INVALID_PROVIDER_RESPONSE');
+    if(!message||message.role!=='assistant'||(!message.tool_calls&&!message.content))throw Error('INVALID_PROVIDER_RESPONSE');
+    if(message.tool_calls!==undefined&&(!Array.isArray(message.tool_calls)||message.tool_calls.length===0))throw Error('INVALID_PROVIDER_RESPONSE');
     if(message.tool_calls?.length>8)throw Error('TOO_MANY_TOOL_CALLS');
     if(message.tool_calls?.length)validateToolSequence([...messages,{role:'assistant',...message}],true);
     return {message:{role:'assistant',content:message.content??null,...(message.tool_calls?{tool_calls:message.tool_calls}:{})},usage:json.usage??{}};
