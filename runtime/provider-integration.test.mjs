@@ -40,3 +40,12 @@ test('DeepSeek adapter rejects empty tool call batches',async()=>{
   const provider=new Provider(config,async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{role:'assistant',content:'done',tool_calls:[]}}]}),{status:200}));
   await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/INVALID_PROVIDER_RESPONSE/);
 });
+
+test('DeepSeek adapter rejects tool-call finish reason without tool calls',async()=>{
+  const provider=new Provider(config,async()=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:'done'}}]}),{status:200}));
+  await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/INVALID_PROVIDER_RESPONSE/);
+});
+test('DeepSeek adapter rejects tool calls when provider says generation stopped',async()=>{
+  const provider=new Provider(config,async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{role:'assistant',content:null,tool_calls:[{id:'call-2',type:'function',function:{name:'inspect_diff',arguments:'{}'}}]}}]}),{status:200}));
+  await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/INVALID_PROVIDER_RESPONSE/);
+});
