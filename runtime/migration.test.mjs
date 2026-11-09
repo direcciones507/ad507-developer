@@ -19,12 +19,12 @@ async function fixture(t){
 }
 const call=(name,args)=>({function:{name,arguments:JSON.stringify(args)}});
 
-test('standalone config keeps all seeds and recovered Mi Contacto ref; Actions cannot be selected',()=>{
+test('standalone config keeps all seeds and recovered Mi Contacto ref; Actions require explicit setup',()=>{
  const c=loadConfig({});assert.equal(c.live,false);assert.equal(c.checkBackend,'local-docker');
  assert.equal(c.projects['mi-contacto'].repository,'direcciones507/mi-contacto');
  assert.equal(c.projects['mi-contacto'].baseBranch,'recovery/mi-contacto-existing-20261101');
  for(const id of ['leveia','direcciones507','empleos-pa','reportapa','junta-comunal-santiago'])assert.ok(c.projects[id]);
- assert.throws(()=>loadConfig({AD507_CHECK_BACKEND:'github-actions'}),/GITHUB_ACTIONS_DISABLED/);
+ assert.equal(loadConfig({AD507_CHECK_BACKEND:'github-actions'}).checkBackend,'github-actions');
 });
 test('selection mismatch is rejected before a task or reservation exists',async t=>{
  const {e,s}=await fixture(t);
