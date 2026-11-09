@@ -34,6 +34,13 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
   $('files').replaceChildren();for(const path of t.files){const b=node('button',path);b.className='secondary';b.addEventListener('click',async()=>{try{const f=await api(`tasks/${id}/file?path=${encodeURIComponent(path)}`);$('file-content').hidden=false;$('file-content').textContent=f.content;}catch(e){showError(e);}});$('files').append(b);}
   const events=await api('tasks/'+id+'/events');$('events').replaceChildren();for(const event of events)$('events').append(node('li',`${event.created} · ${event.kind} · ${JSON.stringify(event.detail)}`));
 }
+$('check-executor').addEventListener('click',async()=>{
+  const button=$('check-executor'),result=$('executor-result');
+  button.disabled=true;result.textContent='Comprobando Docker aislado…';
+  try{const status=await api('executor/preflight');result.textContent=status.ready?'Ejecutor Docker disponible. Falta verificar una tarea real antes de producción.':'Ejecutor no disponible en este servicio. No se ejecutarán comprobaciones fuera del aislamiento.';}
+  catch(error){result.textContent='No se pudo verificar el ejecutor: '+error.message;}
+  finally{button.disabled=false;}
+});
 $('toggle-password').addEventListener('click',()=>{const input=$('password');const visible=input.type==='password';input.type=visible?'text':'password';$('toggle-password').textContent=visible?'🙈 Ocultar contraseña':'👁️ Mostrar contraseña';$('toggle-password').setAttribute('aria-label',visible?'Ocultar contraseña':'Mostrar contraseña');$('toggle-password').setAttribute('aria-pressed',String(visible));});
 $('check-hash').addEventListener('click',async()=>{
   const field=$('hash-check'),button=$('check-hash'),out=$('hash-result');
