@@ -1,0 +1,46 @@
+name: AS Developer Remote Check
+run-name: AD507 check ${{ inputs.remote_job }}
+on:
+  workflow_dispatch:
+    inputs:
+      remote_job:
+        description: Immutable remote check ID
+        required: true
+        type: string
+      remote_ticket:
+        description: One-time scoped check capability
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ad507-remote-${{ inputs.remote_job }}
+  cancel-in-progress: false
+jobs:
+  isolated-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mask runner capability
+        env:
+          CAPABILITY: ${{ inputs.remote_ticket }}
+        run: echo "::add-mask::$CAPABILITY"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare sandbox snapshot from controller
+        env:
+          AD507_CONTROLLER_ORIGIN: https://ad507-developer-production.up.railway.app
+          AD507_RUNNER_DIRECTORY: ${{ runner.temp }}/ad507-check
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node runtime/remote-runner.mjs prepare
+      - name: Build reviewed isolated sandbox image
+        run: docker build -f deploy/checks-ci.Dockerfile -t ad507-checks:remote .
+      - name: Execute immutable snapshot in locked-down Docker
+        env:
+          AD507_RUNNER_DIRECTORY: ${{ runner.temp }}/ad507-check
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node runtime/remote-runner.mjs execute
