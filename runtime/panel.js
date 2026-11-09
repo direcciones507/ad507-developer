@@ -10,7 +10,7 @@ function projectInfo(){const p=status.projects.find(p=>p.id===$('project').value
 async function refresh(){
   status=await api('status');csrf=status.csrf;$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;
   $('provider').textContent=`Proveedor: ${status.provider}${status.provider==='simulation'?' · SIMULACIÓN':''}`;$('readiness').textContent=status.provider==='simulation'?'Modo de prueba: sin llamadas a modelos externos.':status.ready?'Integración configurada; la prueba real debe verificarse.':'Inferencia detenida: faltan credencial o configuración autorizada.';
-  $('runner-status').textContent='Pruebas en ejecutor Docker aislado: se requiere un host e imagen revisados. GitHub Actions requiere configuración explícita.';
+  $('runner-status').textContent=status.checkBackend==='github-actions'?`Ejecutor GitHub Actions: ${status.remote?.ready?'configurado':'pendiente de configuración'}. Minutos reservados: ${status.remote?.minutesReserved??0} / ${status.remote?.minutesLimit??0}.`:'Ejecutor Docker local: requiere un host e imagen revisados.';
   const previous=$('project').value;
   const successor=p=>p.mode==='preparation'&&!p.repository?status.projects.find(other=>other.mode==='development'&&other.repository&&other.name.startsWith(p.name)):null;
   const preferred=status.projects.find(p=>successor(p));
@@ -33,6 +33,7 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
   $('files').replaceChildren();for(const path of t.files){const b=node('button',path);b.className='secondary';b.addEventListener('click',async()=>{try{const f=await api(`tasks/${id}/file?path=${encodeURIComponent(path)}`);$('file-content').hidden=false;$('file-content').textContent=f.content;}catch(e){showError(e);}});$('files').append(b);}
   const events=await api('tasks/'+id+'/events');$('events').replaceChildren();for(const event of events)$('events').append(node('li',`${event.created} · ${event.kind} · ${JSON.stringify(event.detail)}`));
 }
+$('check-executor').addEventListener('click',async()=>{const button=$('check-executor'),out=$('executor-result');button.disabled=true;out.textContent='Comprobando el ejecutor configurado…';try{const result=await api('executor/preflight');const name=result.backend==='github-actions'?'GitHub Actions':'Docker local';out.textContent=result.ready?`${name} disponible. Esta comprobación no ejecuta todavía una tarea remota.`:`${name} no disponible: ${result.reason||'CONFIGURACION_PENDIENTE'}.`; }catch(error){out.textContent='No se pudo comprobar el ejecutor: '+error.message;}finally{button.disabled=false;}});
 $('toggle-password').addEventListener('click',()=>{const input=$('password');const visible=input.type==='password';input.type=visible?'text':'password';$('toggle-password').textContent=visible?'🙈 Ocultar contraseña':'👁️ Mostrar contraseña';$('toggle-password').setAttribute('aria-label',visible?'Ocultar contraseña':'Mostrar contraseña');$('toggle-password').setAttribute('aria-pressed',String(visible));});
 $('check-hash').addEventListener('click',async()=>{
   const field=$('hash-check'),button=$('check-hash'),out=$('hash-result');
