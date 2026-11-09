@@ -71,8 +71,17 @@ export function createApp(c,s,e){
       if(req.method==='POST'&&req.headers['x-csrf-token']!==session.csrf)return send(403,{error:'CSRF_REQUIRED'});
       if(req.method==='POST'&&path==='/api/logout'){s.db.prepare('DELETE FROM sessions WHERE hash=?').run(session.hash);res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});}
       if(req.method==='GET'&&path==='/api/executor/preflight'){
-        try{await e.w.checkAvailability();return send(200,{ready:true,backend:c.checkBackend,remote:c.checkBackend==='github-actions'?{minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null});}
-        catch(error){return send(200,{ready:false,backend:c.checkBackend,reason:error.message==='ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED'?'ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED':'ISOLATED_EXECUTOR_UNAVAILABLE'});}
+        const details=c.checkBackend==='github-actions'?{
+          tokenConfigured:Boolean(c.actionsToken),
+          includedMinutesConfirmed:Boolean(c.actionsIncludedOnly),
+          monthlyMinutesValid:Number.isSafeInteger(c.actionsMonthlyMinutes)&&c.actionsMonthlyMinutes>=10,
+          workflowSHAValid:/^[a-f0-9]{40}$/.test(c.actionsSHA||''),
+          workflowRefConfigured:Boolean(c.actionsRef),
+          monthlyMinutesRemaining:Math.max(0,c.actionsMonthlyMinutes-(e.w.remote?.usage()||0)),
+          projectChecksConfigured:Object.values(c.projects).filter(p=>p.enabled&&p.mode==='development').map(p=>({project:p.id,checks:p.checks}))
+        }:null;
+        try{await e.w.checkAvailability();return send(200,{ready:true,backend:c.checkBackend,details});}
+        catch(error){return send(200,{ready:false,backend:c.checkBackend,reason:error.message==='ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED'?'ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED':'ISOLATED_EXECUTOR_UNAVAILABLE',details});}
       }
       if(req.method==='POST'&&path==='/api/budget/limit'){
         const usd=body.usd,amount=typeof usd==='number'?Math.round(usd*1000000):NaN;
