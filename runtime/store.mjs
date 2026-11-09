@@ -62,6 +62,20 @@ export class Store {
       return released;
     });
   }
+  releaseUnsentReservation(taskId,reservationId,reason){
+    // Only a positively verified non-dispatch may be released; never infer it from a failed task.
+    if(reason!=='provider_not_dispatched')throw Error('RELEASE_EVIDENCE_REQUIRED');
+    return this.tx(()=>{
+      const row=this.db.prepare('SELECT amount FROM reservations WHERE id=? AND task=?').get(reservationId,taskId);
+      if(!row)throw Error('RESERVATION_NOT_FOUND');
+      const t=this.get(taskId);
+      this.db.prepare('DELETE FROM reservations WHERE id=?').run(reservationId);
+      this.db.prepare('UPDATE budgets SET reserved=reserved-? WHERE project=?').run(row.amount,t.project);
+      t.reserved-=row.amount;this.save(t);
+      this.event(taskId,'budget_released_unsent',{id:reservationId,amount:row.amount,reason});
+      return row.amount;
+    });
+  }
   globalBudgetLimit(fallback){const row=this.db.prepare("SELECT value FROM settings WHERE key='global_budget_micro_usd'").get();const value=row?Number(row.value):fallback;if(!Number.isSafeInteger(value)||value<1)throw Error('INVALID_GLOBAL_BUDGET');return value;}
   setGlobalBudgetLimit(amount,baseline){
     if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
