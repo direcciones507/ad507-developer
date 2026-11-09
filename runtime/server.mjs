@@ -79,6 +79,10 @@ export function createApp(c,s,e){
         if(!Number.isFinite(usd)||!Number.isSafeInteger(amount)||Math.abs(amount/1000000-usd)>0.0000001||body.confirm!=='AUTORIZO')return send(400,{error:'BUDGET_CONFIRMATION_REQUIRED'});
         return send(200,s.setGlobalBudgetLimit(amount,c.globalCap));
       }
+      if(req.method==='POST'&&path==='/api/budget/reset-old'){
+        if(body.confirm!=='BORRAR HISTORIAL ANTIGUO')return send(400,{error:'RESET_CONFIRMATION_REQUIRED'});
+        return send(200,s.resetOldWork());
+      }
       if(req.method==='GET'&&path==='/api/budget/audit')return send(200,s.budgetAudit());
       if(req.method==='GET'&&path==='/api/status')return send(200,{csrf:session.csrf,provider:c.provider,ready:providerReady(c),live:c.live,publishing:c.publishing,checkBackend:c.checkBackend||'local-docker',sourceMode:c.sourceMode||'manual',
         remote:e.w.remote?{ready:e.w.remote.ready(),minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null,
