@@ -10,6 +10,7 @@ async function refresh(){
   status=await api('status');csrf=status.csrf;$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;
   $('provider').textContent=`Proveedor: ${status.provider}${status.provider==='simulation'?' · SIMULACIÓN':''}`;$('readiness').textContent=status.provider==='simulation'?'Modo de prueba: sin llamadas a modelos externos.':status.ready?'Integración configurada; la prueba real debe verificarse.':'Inferencia detenida: faltan credencial o configuración autorizada.';
   $('runner-status').textContent='Pruebas en ejecutor Docker aislado: se requiere un host e imagen revisados. GitHub Actions deshabilitado.';
+  $('global-budget').textContent=status.budget?`Consumo reservado global: ${money(status.budget.reserved)} / ${money(status.budget.limit)} (límite máximo).`:'';
   const previous=$('project').value;
   const successor=p=>p.mode==='preparation'&&!p.repository?status.projects.find(other=>other.mode==='development'&&other.repository&&other.name.startsWith(p.name)):null;
   const preferred=status.projects.find(p=>successor(p));
