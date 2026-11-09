@@ -26,4 +26,9 @@ test('authorized simulated job produces a review gate and never publishes automa
   assert.match(delivered.branch,/^ad507\/task-/);
   assert.deepEqual(delivered.files,['docs/ad507-simulation.md']);
   assert.equal(store.events(job.id).some(event=>event.kind==='owner_approve'),false);
+  await engine.tick();
+  const waiting=store.get(job.id);
+  assert.equal(waiting.state,'awaiting_approval');
+  assert.equal(waiting.gate,'delivery');
+  assert.equal(store.events(job.id).some(event=>event.kind==='owner_approve'),false);
 });
