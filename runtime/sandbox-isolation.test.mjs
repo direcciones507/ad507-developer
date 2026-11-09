@@ -29,3 +29,24 @@ test('untrusted check runs only in restricted Docker and cleans its snapshot',as
     await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('failed isolated check stays failed, without host fallback, and removes snapshot',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'as-developer-failed-check-'));
+  const snapshot=join(root,'snapshot');
+  await mkdir(snapshot);
+  const calls=[];
+  const containerExec=async(program,args)=>{
+    calls.push({program,args});
+    if(args[0]==='run')throw Object.assign(Error('sandbox check failed'),{stdout:'',stderr:'TEST_FAILURE'});
+    return {stdout:'',stderr:''};
+  };
+  try{
+    const workspace=new Workspace({root,sandboxImage:'ad507-checks:remote',env:{},checkBackend:'local-docker'},{containerExec});
+    const result=await workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','project-syntax',new AbortController().signal);
+    assert.equal(result.passed,false);
+    assert.match(result.output,/TEST_FAILURE/);
+    assert.deepEqual(calls.map(c=>c.program),['docker','docker']);
+    assert.deepEqual(calls.map(c=>c.args[0]),['run','rm']);
+    await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
+  }finally{await rm(root,{recursive:true,force:true});}
+});
