@@ -67,3 +67,34 @@ test('cancelled sandbox check never launches Docker and cleans its snapshot',asy
     await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('invalid check identity or name cleans snapshot without launching Docker',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'as-developer-invalid-check-'));
+  const calls=[];
+  try{
+    const workspace=new Workspace({root,sandboxImage:'ad507-checks:reviewed',env:{},checkBackend:'local-docker'},{
+      containerExec:async()=>{calls.push('docker');return {stdout:'',stderr:''};}
+    });
+    for(const [id,name] of [['invalid-id','project-syntax'],['12345678-1234-1234-1234-123456789abc','unknown-check']]){
+      const snapshot=join(root,'snapshot-'+calls.length+'-'+name);await mkdir(snapshot);
+      await assert.rejects(workspace.runSnapshot(snapshot,id,name),/INVALID_CHECK_ID|CHECK_NOT_ALLOWED|UNKNOWN_CHECK|CHECK_/);
+      await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
+    }
+    assert.deepEqual(calls,[]);
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('sandbox runs without an AbortSignal and cleans up on failure',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'as-developer-no-signal-'));
+  const snapshot=join(root,'snapshot');await mkdir(snapshot);
+  const calls=[];
+  try{
+    const workspace=new Workspace({root,sandboxImage:'ad507-checks:reviewed',env:{},checkBackend:'local-docker'},{
+      containerExec:async(_program,args)=>{calls.push(args[0]);if(args[0]==='run')throw Error('Docker unavailable');return {stdout:'',stderr:''};}
+    });
+    const result=await workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','project-syntax');
+    assert.equal(result.passed,false);
+    assert.deepEqual(calls,['run','rm']);
+    await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
+  }finally{await rm(root,{recursive:true,force:true});}
+});
