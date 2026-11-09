@@ -9,20 +9,21 @@ export const tools = [
 const endpoint='https://api.deepseek.com/chat/completions';
 export class Provider {
   constructor(config,fetchImpl=fetch){this.c=config;this.fetch=fetchImpl;}
-  estimate(messages){
-    // UTF-8 bytes conservatively bound input token count; reserve output maximum BEFORE the request.
+  estimate(messages,maxOutput=this.c.maxOutput){
+    // Reserve a bounded output allowance; never reserve more than the configured per-call output ceiling.
     validateToolSequence(messages);
     const bytes=Buffer.byteLength(JSON.stringify({messages,tools}),'utf8')+4096;
-    const amount=Math.ceil(bytes*this.c.inputRate+this.c.maxOutput*this.c.outputRate);
+    const amount=Math.ceil(bytes*this.c.inputRate+maxOutput*this.c.outputRate);
     if(!Number.isSafeInteger(amount)||amount<=0)throw Error('PRICING_REQUIRED');return amount;
   }
-  async next(messages,signal){
+  async next(messages,signal,maxOutput=this.c.maxOutput){
+    if(!Number.isSafeInteger(maxOutput)||maxOutput<1||maxOutput>this.c.maxOutput)throw Error('INVALID_OUTPUT_LIMIT');
     if(!this.c.live||!this.c.apiKey||!this.c.model)throw Error('PROVIDER_NOT_CONFIGURED');
     if(this.c.provider!=='deepseek')throw Error('DEEPSEEK_ONLY');
     validateToolSequence(messages);
     const res=await this.fetch(endpoint,{method:'POST',redirect:'error',signal,
       headers:{Authorization:`Bearer ${this.c.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:this.c.model,messages,tools,max_tokens:this.c.maxOutput})});
+      body:JSON.stringify({model:this.c.model,messages,tools,max_tokens:maxOutput})});
     // Never persist provider error bodies: they can include sensitive request details.
     if(!res.ok){
       // Log only a bounded, allowlisted error classification; never log provider messages or request bodies.
