@@ -7,7 +7,7 @@ import { requireCheck } from './checks-policy.mjs';
 import { sanitizeOutput } from './workspace.mjs';
 import { readLimited } from './provider.mjs';
 const hash = value => createHash('sha256').update(value).digest('hex');
-const repo = 'direcciones507/leveia';
+const repo = 'direcciones507/ad507-developer';
 const finished = new Set(['completed', 'cancelled', 'failed', 'expired']);
 export class ActionsChecks {
   constructor(config, store, workspace, { fetchImpl = fetch, pollMs = 1000 } = {}) {
@@ -70,7 +70,7 @@ export class ActionsChecks {
     requireCheck(project, name); signal.throwIfAborted();
     // Fail closed: this runner is authenticated against LEVEIA only. Never bill
     // LEVEIA Actions minutes for checks requested by another project.
-    if (project.id !== 'leveia' || project.repository !== repo || t.project !== 'leveia') throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
+    if (project.mode !== 'development' || !project.repository || t.project !== project.id) throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
     if (!this.ready()) throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');
     const manifest = await this.manifest(t, name);
     const snapshotHash = hash(JSON.stringify(manifest));
@@ -90,7 +90,7 @@ export class ActionsChecks {
       this.s.tx(() => { this.reserve(job); this.put(job); this.s.event(t.id, 'remote_check_reserved', { id, check: name, minutes: job.minutes }); });
       job.state = 'dispatching'; this.put(job); // Persist BEFORE the external dispatch; never retry an uncertain request automatically.
       try {
-        const result = await this.api(`actions/workflows/ad507-technology-agent-ci.yml/dispatches`, 'POST', { ref: job.ref, inputs: { remote_job: id, remote_ticket: this.ticket(job) } });
+        const result = await this.api(`actions/workflows/remote-check.yml/dispatches`, 'POST', { ref: job.ref, inputs: { remote_job: id, remote_ticket: this.ticket(job) } });
         job = this.get(id);
         if (result?.workflow_run_id && !/^[0-9]+$/.test(String(result.workflow_run_id)))throw Error('RUNNER_IDENTITY_REJECTED');
         if (result?.workflow_run_id) { job.runId = String(result.workflow_run_id); job.runUrl = `https://github.com/${repo}/actions/runs/${job.runId}`; }
@@ -123,7 +123,7 @@ export class ActionsChecks {
     if (!identity || !/^[0-9]+$/.test(String(identity.runId)) || identity.attempt !== 1 || identity.sha !== job.expectedSHA) throw Error('RUNNER_IDENTITY_REJECTED');
     if (job.runId && job.runId !== String(identity.runId)) throw Error('RUNNER_IDENTITY_REJECTED');
     const run = await this.api(`actions/runs/${identity.runId}`);
-    if (run.head_sha !== job.expectedSHA || run.head_branch !== job.ref || run.event !== 'workflow_dispatch' || !['AD507 Technology Agent CI',`AD507 check ${job.id}`].includes(run.name) || run.path?.split('@')[0] !== '.github/workflows/ad507-technology-agent-ci.yml' || run.display_title !== `AD507 check ${job.id}` || run.repository?.full_name !== repo) throw Error('RUNNER_IDENTITY_REJECTED');
+    if (run.head_sha !== job.expectedSHA || run.head_branch !== job.ref || run.event !== 'workflow_dispatch' || !['AS Developer Remote Check',`AD507 check ${job.id}`].includes(run.name) || run.path?.split('@')[0] !== '.github/workflows/remote-check.yml' || run.display_title !== `AD507 check ${job.id}` || run.repository?.full_name !== repo) throw Error('RUNNER_IDENTITY_REJECTED');
   }
   async claim(id, ticket, identity) {
     let job = this.authenticate(id, ticket); if (finished.has(job.state)) throw Error('REMOTE_JOB_FINISHED');
