@@ -21,7 +21,8 @@ export class Store {
         kind TEXT NOT NULL, detail TEXT NOT NULL, created TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS budgets(project TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS reservations(id TEXT PRIMARY KEY, task TEXT NOT NULL, amount INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     this.recover();
   }
   tx(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const r = fn(); this.db.exec('COMMIT'); return r; } catch(e) { this.db.exec('ROLLBACK'); throw e; } }
@@ -60,6 +61,11 @@ export class Store {
       this.save(t);this.event(t.id,'budget_settled',{id:reservationId,reserved:row.amount,actual,released});
       return released;
     });
+  }
+  globalBudgetLimit(fallback){const row=this.db.prepare("SELECT value FROM settings WHERE key='global_budget_micro_usd'").get();const value=row?Number(row.value):fallback;if(!Number.isSafeInteger(value)||value<1)throw Error('INVALID_GLOBAL_BUDGET');return value;}
+  setGlobalBudgetLimit(amount,baseline){
+    if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
+    return this.tx(()=>{const previous=this.globalBudgetLimit(baseline);if(amount<this.globalUsage())throw Error('BUDGET_BELOW_COMMITTED_USAGE');this.db.prepare("INSERT INTO settings(key,value) VALUES('global_budget_micro_usd',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(amount));this.event(null,'global_budget_limit_changed',{previous,amount});return {previous,amount};});
   }
   budgetAudit(){
     const projects=this.db.prepare('SELECT project,reserved FROM budgets ORDER BY project').all();
