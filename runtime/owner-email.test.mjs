@@ -31,6 +31,6 @@ test('owner email binding accepts case-insensitive email and rejects wrong or ab
 test('invalid configured owner email fails closed at startup', async t => {
   const root=await mkdtemp(join(tmpdir(),'asdev-invalid-'));
   const store=new Store(root);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
-  const c={...loadConfig({AD507_DATA_DIR:root,AD507_PROVIDER:'simulation'}),ownerHash:passwordHash('long-password'),ownerEmail:'invalid'};
+  const c={...loadConfig({AD507_DATA_DIR:root,AD507_PROVIDER:'simulation'}),ownerHash:passwordHash('long-fixture-password-2026'),ownerEmail:'invalid'};
   assert.throws(()=>createApp(c,store,{w:{remote:null}}),/OWNER_EMAIL_INVALID/);
 });
