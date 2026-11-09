@@ -1,4 +1,4 @@
-// HISTORICAL OFFLINE PROTOCOL TEST ONLY; operational GitHub Actions backend is disabled.
+// Offline protocol test; real dispatch requires explicit operator configuration.
 // Ephemeral CI: real HTTP controller and Docker runner. GitHub dispatch/identity API is a fixture;
 // no real provider key, public controller, long-lived token, billable Railway service or production access.
 import assert from 'node:assert/strict';
@@ -30,7 +30,7 @@ const reserve=createServer();reserve.listen(0,'127.0.0.1');await once(reserve,'l
 const sha='a'.repeat(40);const c={...loadConfig({AD507_DATA_DIR:join(root,'data'),AD507_PROVIDER:'simulation',AD507_LEVEIA_SOURCE:source}),origin:`http://127.0.0.1:${port}`,ownerHash:passwordHash('ephemeral-ci-owner-password'),checkBackend:'github-actions',actionsToken:'fixture-only-token',actionsIncludedOnly:true,actionsMonthlyMinutes:10,actionsProjectMinutes:10,actionsTaskMinutes:10,actionsSHA:sha,actionsRef:'ad507/task-developer-runtime'};
 const s=new Store(c.root),w=new Workspace(c);let dispatches=0;
 const remote=new ActionsChecks(c,s,w,{pollMs:10,fetchImpl:async(url)=>{if(url.endsWith('/dispatches')){dispatches++;return Response.json({workflow_run_id:123});}
- const j=JSON.parse(s.db.prepare('SELECT data FROM remote_checks LIMIT 1').get().data);return Response.json({head_sha:sha,head_branch:c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${j.id}`,path:'.github/workflows/ad507-technology-agent-ci.yml',display_title:`AD507 check ${j.id}`,repository:{full_name:'direcciones507/leveia'}});}});w.remote=remote;
+ const j=JSON.parse(s.db.prepare('SELECT data FROM remote_checks LIMIT 1').get().data);return Response.json({head_sha:sha,head_branch:c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${j.id}`,path:'.github/workflows/remote-check.yml',display_title:`AD507 check ${j.id}`,repository:{full_name:'direcciones507/ad507-developer'}});}});w.remote=remote;
 const app=createApp(c,s,{w});app.listen(port,'127.0.0.1');await once(app,'listening');
 try{
  const task=s.create('leveia','Remote CI fixture',100,'simulation');await w.prepare(task,c.projects.leveia);task.state='running';s.save(task);await w.write(task,c.projects.leveia,'docs/remote-change.md','remote snapshot revision');task.revision=1;s.save(task);
