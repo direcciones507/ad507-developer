@@ -117,7 +117,7 @@ export class Engine {
         // Finish an in-flight atomic step, retaining requested control state and its recovery marker.
         t.state=current.state;t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'worker_stopped',{state:t.state,inflight:t.inflight??null});
       }else if(e.message==='REMOTE_DISPATCH_UNCERTAIN'){t.state='awaiting_approval';t.gate='recovery';t.reason='Resultado del envío remoto incierto. No se reintenta automáticamente; revisar el job antes de continuar.';this.s.save(t);this.s.event(t.id,'remote_dispatch_review_required');}
-      else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);this.s.event(t.id,'worker_failed',{reason:t.reason});}
+      else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);const site=String(e.stack||'').split('\n').slice(1).find(line=>/runtime\/(engine|provider|store)\.mjs:\d+/.test(line))?.match(/runtime\/(engine|provider|store)\.mjs:(\d+)/);this.s.event(t.id,'worker_failed',{reason:t.reason,...(t.reason==='EXECUTION_FAILED'?{errorType:String(e.name||'Error').slice(0,60),site:site?site[1]+':'+site[2]:'unknown'}:{})});}
     }finally{clearTimeout(timeout);const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
   }
   checkpoint(t){const current=this.s.get(t.id);if(['paused','cancelled','awaiting_approval'].includes(current.state)){t.state=current.state;t.gate=current.gate;t.reason=current.reason;}this.s.save(t);}
