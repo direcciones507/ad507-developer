@@ -118,7 +118,7 @@ export class Workspace {
       '--pids-limit=64','--memory=512m','--cpus=1','--user=1000:1000','--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--tmpfs','/work:rw,nosuid,size=256m,uid=1000,gid=1000',
       '--mount',`type=bind,src=${snapshot},dst=/source,readonly`,
       '--workdir','/work','--env','HOME=/tmp',this.c.sandboxImage,'timeout','--signal=KILL','120s','node','/opt/ad507-link-deps.mjs',...command];
-    try {const r=await this.containerExec('docker',args,{env:{PATH:process.env.PATH},signal,timeout:120000,maxBuffer:256000});return {check:name,passed:true,output:sanitizeOutput(r.stdout+'\n'+r.stderr,this.c)};}
+    try {if(signal?.aborted)throw Error('CHECK_ABORTED');const r=await this.containerExec('docker',args,{env:{PATH:process.env.PATH},signal,timeout:120000,maxBuffer:256000});return {check:name,passed:true,output:sanitizeOutput(r.stdout+'\n'+r.stderr,this.c)};}
     catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
     finally{await this.containerExec('docker',['rm','-f',container],{env:{PATH:process.env.PATH},timeout:10000}).catch(()=>{});await rm(snapshot,{recursive:true,force:true});}
   }
