@@ -67,7 +67,7 @@ export class SimulationProvider {
   estimate(){return 1;}
   async next(messages,signal){
     signal?.throwIfAborted(); const n=messages.filter(m=>m.role==='assistant').length;
-    const calls=[['list_repository_files',{query:''}],['write_repository_file',{path:'docs/ad507-simulation.md',content:'# AD507 Developer\nPrueba simulada: archivo creado en rama aislada.\n'}],['inspect_diff',{}]];
+    const calls=[['list_repository_files',{query:''}],['write_repository_file',{path:'docs/ad507-simulation.md',content:'# AS Developer\nPrueba simulada: archivo creado en rama aislada.\n'}],['inspect_diff',{}]];
     return n<calls.length?{message:{role:'assistant',content:null,tool_calls:[{id:`sim-${n}`,type:'function',function:{name:calls[n][0],arguments:JSON.stringify(calls[n][1])}}]},usage:{prompt_tokens:0,completion_tokens:0}}:
       {message:{role:'assistant',content:'Simulación terminada. Archivo preparado para revisión humana. No se ejecutó DeepSeek ni se validó el producto.'},usage:{prompt_tokens:0,completion_tokens:0}};
   }
