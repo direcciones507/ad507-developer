@@ -88,10 +88,13 @@ export class Engine {
         if(t.noProgress)throw Error('NO_PROGRESS');
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
-        const amount=this.provider.estimate(t.messages);this.s.reserve(t,amount,p.projectCap,this.c.globalCap);
+        const amount=this.provider.estimate(t.messages);const reservationId=this.s.reserve(t,amount,p.projectCap,this.c.globalCap);
         t.inflight={kind:'provider'};this.checkpoint(t);
         const response=await this.provider.next(t.messages,controller.signal);
         controller.signal.throwIfAborted();
+        const promptTokens=Number(response.usage?.prompt_tokens),completionTokens=Number(response.usage?.completion_tokens);
+        if(Number.isSafeInteger(promptTokens)&&promptTokens>=0&&Number.isSafeInteger(completionTokens)&&completionTokens>=0){const actual=Math.ceil(promptTokens*this.c.inputRate+completionTokens*this.c.outputRate);if(actual<=amount)this.s.settle(t,reservationId,actual);}
+        // Missing or inconsistent usage is never assumed free; retain the full reservation.
         t.usage.input+=Number(response.usage?.prompt_tokens||0);t.usage.output+=Number(response.usage?.completion_tokens||0);
         t.messages.push(response.message);t.inflight=null;t.steps++;
         if(response.message.tool_calls?.length){t.pendingCalls=structuredClone(response.message.tool_calls);this.checkpoint(t);}
