@@ -110,8 +110,10 @@ export class Workspace {
     return this.runSnapshot(snapshot,t.id,name,signal);
   }
   async runSnapshot(snapshot,id,name,signal){
+    let container=null;
+    try {
     if(!/^[a-f0-9-]{36}$/.test(id))throw Error('INVALID_CHECK_ID');
-    const command=requireCheck({mode:'development'},name);const container=`ad507-${id}`;
+    const command=requireCheck({mode:'development'},name);container=`ad507-${id}`;
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     // Run untrusted tests with no host env, network, socket, capabilities or secrets; never fall back to host execution.
     const args=['run','--pull=never','--rm','--name',container,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges',
@@ -119,8 +121,9 @@ export class Workspace {
       '--mount',`type=bind,src=${snapshot},dst=/source,readonly`,
       '--workdir','/work','--env','HOME=/tmp',this.c.sandboxImage,'timeout','--signal=KILL','120s','node','/opt/ad507-link-deps.mjs',...command];
     try {if(signal?.aborted)throw Error('CHECK_ABORTED');const r=await this.containerExec('docker',args,{env:{PATH:process.env.PATH},signal,timeout:120000,maxBuffer:256000});return {check:name,passed:true,output:sanitizeOutput(r.stdout+'\n'+r.stderr,this.c)};}
-    catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
-    finally{await this.containerExec('docker',['rm','-f',container],{env:{PATH:process.env.PATH},timeout:10000}).catch(()=>{});await rm(snapshot,{recursive:true,force:true});}
+    catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal?.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
+    finally{if(container)await this.containerExec('docker',['rm','-f',container],{env:{PATH:process.env.PATH},timeout:10000}).catch(()=>{});}
+    } finally {await rm(snapshot,{recursive:true,force:true});}
   }
 }
 export function sanitizeOutput(value,c){
