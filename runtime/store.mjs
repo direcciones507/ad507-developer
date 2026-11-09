@@ -61,6 +61,19 @@ export class Store {
       return released;
     });
   }
+  budgetAudit(){
+    const projects=this.db.prepare('SELECT project,reserved FROM budgets ORDER BY project').all();
+    const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.project,t.state,t.data FROM reservations r LEFT JOIN tasks t ON t.id=r.task ORDER BY t.updated DESC").all();
+    const reservations=rows.map(r=>{
+      const t=r.data?JSON.parse(r.data):null;
+      const events=this.db.prepare("SELECT kind,detail FROM events WHERE task=? AND kind IN ('budget_reserved','budget_settled') ORDER BY seq").all(r.task);
+      const settled=events.some(e=>{if(e.kind!=='budget_settled')return false;try{return JSON.parse(e.detail).id===r.id;}catch{return false;}});
+      return {id:r.id,task:r.task,project:r.project||null,state:r.state||'missing',amount:r.amount,settlementVerified: settled,uncertain:!settled,taskReserved:t?.reserved??null};
+    });
+    const reservationTotal=reservations.reduce((n,r)=>n+r.amount,0);
+    const budgetTotal=projects.reduce((n,p)=>n+p.reserved,0);
+    return {budgetTotal,reservationTotal,consistent:budgetTotal===reservationTotal,projects,reservations,notice:'Read-only accounting. Historical settlements without reservation IDs cannot be safely classified or refunded.'};
+  }
   globalUsage(){return this.db.prepare('SELECT COALESCE(SUM(reserved),0) AS total FROM budgets').get().total;}
   projectUsage(id){return this.db.prepare('SELECT reserved FROM budgets WHERE project=?').get(id)?.reserved??0;}
   close(){this.db.close();if(this.leader){this.leader.exec('ROLLBACK');this.leader.close();}}
