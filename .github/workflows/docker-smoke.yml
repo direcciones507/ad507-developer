@@ -16,11 +16,11 @@ jobs:
     timeout-minutes: 12
     steps:
       - name: Check out source without persisted credentials
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
