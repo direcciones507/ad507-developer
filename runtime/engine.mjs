@@ -88,7 +88,7 @@ export class Engine {
         if(t.noProgress)throw Error('NO_PROGRESS');
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
-        const amount=this.provider.estimate(t.messages);const reservationId=this.s.reserve(t,amount,p.projectCap,this.c.globalCap);
+        const amount=this.provider.estimate(t.messages);const reservationId=this.s.reserve(t,amount,p.projectCap,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
         const response=await this.provider.next(t.messages,controller.signal);
         controller.signal.throwIfAborted();
