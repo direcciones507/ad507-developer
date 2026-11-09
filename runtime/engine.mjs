@@ -88,9 +88,9 @@ export class Engine {
         if(t.noProgress)throw Error('NO_PROGRESS');
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
-        const remaining=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
+        const availableBudget=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
         const inputEstimate=this.provider.estimate(t.messages,0);
-        const outputAllowance=Math.min(this.c.maxOutput,Math.floor((remaining-inputEstimate)/this.c.outputRate));
+        const outputAllowance=Math.min(this.c.maxOutput,Math.floor((availableBudget-inputEstimate)/this.c.outputRate));
         if(outputAllowance<1)throw Error('BUDGET_EXHAUSTED');
         const amount=this.provider.estimate(t.messages,outputAllowance);const reservationId=this.s.reserve(t,amount,Number.MAX_SAFE_INTEGER,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
