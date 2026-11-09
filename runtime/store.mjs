@@ -47,6 +47,20 @@ export class Store {
       this.db.prepare('INSERT INTO budgets VALUES(?,?) ON CONFLICT(project) DO UPDATE SET reserved=reserved+excluded.reserved').run(t.project,amount);
       t.reserved=fresh.reserved+amount; this.save(t);this.event(t.id,'budget_reserved',{id,amount});return id;});
   }
+  settle(t, reservationId, actual) {
+    if(!Number.isSafeInteger(actual)||actual<0)throw Error('INVALID_SETTLEMENT');
+    return this.tx(()=>{
+      const row=this.db.prepare('SELECT amount FROM reservations WHERE id=? AND task=?').get(reservationId,t.id);
+      if(!row)throw Error('RESERVATION_NOT_FOUND');
+      if(actual>row.amount)throw Error('ACTUAL_COST_EXCEEDS_RESERVATION');
+      const released=row.amount-actual;
+      this.db.prepare('UPDATE reservations SET amount=? WHERE id=?').run(actual,reservationId);
+      this.db.prepare('UPDATE budgets SET reserved=reserved-? WHERE project=?').run(released,t.project);
+      const fresh=this.get(t.id);t.reserved=fresh.reserved-released;
+      this.save(t);this.event(t.id,'budget_settled',{reserved:row.amount,actual,released});
+      return released;
+    });
+  }
   globalUsage(){return this.db.prepare('SELECT COALESCE(SUM(reserved),0) AS total FROM budgets').get().total;}
   projectUsage(id){return this.db.prepare('SELECT reserved FROM budgets WHERE project=?').get(id)?.reserved??0;}
   close(){this.db.close();if(this.leader){this.leader.exec('ROLLBACK');this.leader.close();}}
