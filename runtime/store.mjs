@@ -46,7 +46,7 @@ export class Store {
       if(fresh.reserved+amount>fresh.budget||used+amount>projectCap||this.globalUsage()+amount>globalCap)throw Error('BUDGET_EXHAUSTED');
       const id=randomUUID(); this.db.prepare('INSERT INTO reservations VALUES(?,?,?)').run(id,t.id,amount);
       this.db.prepare('INSERT INTO budgets VALUES(?,?) ON CONFLICT(project) DO UPDATE SET reserved=reserved+excluded.reserved').run(t.project,amount);
-      t.reserved=fresh.reserved+amount; this.save(t);this.event(t.id,'budget_reserved',{id,amount});return id;});
+      t.reserved=fresh.reserved+amount; this.save(t);this.event(t.id,'budget_reserved',{id,amount,scope:'single_provider_call',taskLimit:fresh.budget,globalLimit:globalCap});return id;});
   }
   settle(t, reservationId, actual) {
     if(!Number.isSafeInteger(actual)||actual<0)throw Error('INVALID_SETTLEMENT');
