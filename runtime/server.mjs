@@ -8,6 +8,7 @@ const assets={'/':'panel.html','/panel.js':'panel.js','/panel.css':'panel.css'};
 export function publicTask(t){const {messages,inflight,...safe}=t;return {...safe,interrupted:inflight?{kind:inflight.kind,name:inflight.name}:null};}
 export function createApp(c,s,e){
   if(!/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(c.ownerHash||''))throw Error('OWNER_PASSWORD_HASH_REQUIRED');
+  if(c.ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.ownerEmail))throw Error('OWNER_EMAIL_INVALID');
   const origin=new URL(c.origin);if(origin.protocol!=='https:'&&!(origin.protocol==='http:'&&['127.0.0.1','localhost'].includes(origin.hostname)&&['127.0.0.1','localhost'].includes(c.host)))throw Error('HTTPS_REQUIRED');
   const secure=origin.protocol==='https:';const cookieName=secure?'__Host-ad507':'ad507';const attempts=new Map();
   const cookie=(token,maxAge=43200)=>`${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure?'; Secure':''}`;
@@ -60,7 +61,10 @@ export function createApp(c,s,e){
         const ip=req.socket.remoteAddress;const now=Date.now();for(const [key,a] of attempts)if(a.until<now)attempts.delete(key);
         const rate=attempts.get(ip)||{count:0,until:now+15*60*1000};
         if(rate.count>=5)return send(429,{error:'LOGIN_RATE_LIMIT'});
-        if(!verify(body.password,c.ownerHash)){rate.count++;attempts.set(ip,rate);s.event(null,'login_failed');return send(401,{error:'INVALID_LOGIN'});}
+        const validEmail=!c.ownerEmail||(typeof body.email==='string'&&body.email.trim().toLowerCase()===c.ownerEmail);
+        // Always perform password verification, including when the email is wrong.
+        const validPassword=verify(body.password,c.ownerHash);
+        if(!validEmail||!validPassword){rate.count++;attempts.set(ip,rate);s.event(null,'login_failed');return send(401,{error:'INVALID_LOGIN'});}
         attempts.delete(ip);const session=createSession(s);res.setHeader('Set-Cookie',cookie(session.token));s.event(null,'login_success');return send(200,{csrf:session.csrf});
       }
       const session=getSession(s,req.headers.cookie,cookieName);if(!session)return send(401,{error:'AUTHENTICATION_REQUIRED'});
