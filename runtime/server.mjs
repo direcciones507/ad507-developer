@@ -70,6 +70,10 @@ export function createApp(c,s,e){
       const session=getSession(s,req.headers.cookie,cookieName);if(!session)return send(401,{error:'AUTHENTICATION_REQUIRED'});
       if(req.method==='POST'&&req.headers['x-csrf-token']!==session.csrf)return send(403,{error:'CSRF_REQUIRED'});
       if(req.method==='POST'&&path==='/api/logout'){s.db.prepare('DELETE FROM sessions WHERE hash=?').run(session.hash);res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});}
+      if(req.method==='GET'&&path==='/api/executor/preflight'){
+        try{await e.w.checkAvailability();return send(200,{ready:true,backend:'local-docker'});}
+        catch{return send(200,{ready:false,backend:'local-docker',reason:'ISOLATED_EXECUTOR_UNAVAILABLE'});}
+      }
       if(req.method==='GET'&&path==='/api/status')return send(200,{csrf:session.csrf,provider:c.provider,ready:providerReady(c),live:c.live,publishing:c.publishing,checkBackend:c.checkBackend||'local-docker',sourceMode:c.sourceMode||'manual',
         remote:e.w.remote?{ready:e.w.remote.ready(),minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null,
         budget:{reserved:s.globalUsage(),limit:c.globalCap},projects:Object.values(c.projects).filter(p=>p.enabled).map(p=>({id:p.id,name:p.name,mode:p.mode,repository:p.repository,baseBranch:p.baseBranch,checks:p.checks,sourceReady:!!p.source||p.mode==='preparation'||Boolean(c.sourceMode==='github'&&projectToken(c,p)),budget:p.projectCap,reserved:s.projectUsage(p.id),taskCap:p.taskCap}))});
