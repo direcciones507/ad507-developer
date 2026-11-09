@@ -50,3 +50,20 @@ test('failed isolated check stays failed, without host fallback, and removes sna
     await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('cancelled sandbox check never launches Docker and cleans its snapshot',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'as-developer-cancelled-'));
+  const snapshot=join(root,'snapshot');
+  await mkdir(snapshot);
+  const calls=[];
+  const workspace=new Workspace({root,sandboxImage:'ad507-checks:reviewed',env:{},checkBackend:'local-docker'},{
+    containerExec:async(program,args)=>{calls.push([program,...args]);return {stdout:'',stderr:''};}
+  });
+  const controller=new AbortController();
+  controller.abort();
+  try{
+    await assert.rejects(workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','project-syntax',controller.signal),/CHECK_ABORTED/);
+    assert.deepEqual(calls.map(c=>c[1]),['rm']);
+    await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
+  }finally{await rm(root,{recursive:true,force:true});}
+});
