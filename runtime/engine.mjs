@@ -91,7 +91,7 @@ export class Engine {
         const availableBudget=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
         const inputEstimate=this.provider.estimate(t.messages,0);
         const outputAllowance=Math.min(this.c.maxOutput,Math.floor((availableBudget-inputEstimate)/this.c.outputRate));
-        if(outputAllowance<1)throw Error('BUDGET_EXHAUSTED');
+        if(outputAllowance<1){this.s.event(t.id,'budget_insufficient_for_next_call',{taskRemaining:Math.max(0,t.budget-t.reserved),globalRemaining:Math.max(0,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage()),inputEstimate,requiredMinimum:inputEstimate+this.c.outputRate});throw Error('BUDGET_EXHAUSTED');}
         const amount=this.provider.estimate(t.messages,outputAllowance);const reservationId=this.s.reserve(t,amount,Number.MAX_SAFE_INTEGER,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
         const response=await this.provider.next(t.messages,controller.signal,outputAllowance);
@@ -131,8 +131,8 @@ export class Engine {
       const query=['*','**/*','.'].includes(args.query)?'':args.query;
       const inventory=await this.w.list(t,'');
       const files=query?inventory.filter(path=>path.includes(query)):inventory;
-      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:inventory.length,matchedCount:files.length,inventoryLimit:3000,possiblyTruncated:inventory.length===3000,files,
-        ...(files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};
+      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:inventory.length,matchedCount:files.length,inventoryLimit:3000,possiblyTruncated:inventory.length===3000,files:files.slice(0,40),
+        ...(files.length>40?{hint:'Showing first 40 paths only. Use a specific literal substring query to inspect the remaining files without expanding model context.'}:files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};
       this.observe(t,'list:'+query,files.length===0);return result;
     }
     if(name==='read_repository_file'){
