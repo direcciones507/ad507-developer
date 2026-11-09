@@ -22,7 +22,7 @@ export function loadConfig(env=process.env) {
     actionsIncludedOnly:env.AD507_ACTIONS_INCLUDED_ONLY_CONFIRMED==='true',
     actionsMonthlyMinutes:Number(env.AD507_ACTIONS_MONTHLY_MINUTES||0),
     actionsProjectMinutes:Number(env.AD507_ACTIONS_PROJECT_MINUTES||30),actionsTaskMinutes:Number(env.AD507_ACTIONS_TASK_MINUTES||30),live:env.AD507_LIVE_ENABLED==='true',
-    ownerHash:env.AD507_OWNER_PASSWORD_HASH,origin:env.AD507_ORIGIN||'http://127.0.0.1:8787',
+    ownerHash:env.AD507_OWNER_PASSWORD_HASH,ownerEmail:(env.AD507_OWNER_EMAIL||'').trim().toLowerCase(),origin:env.AD507_ORIGIN||'http://127.0.0.1:8787',
     port:Number(env.PORT||8787),host:env.AD507_HOST||'127.0.0.1',
     model:env.AD507_MODEL||env.DEEPSEEK_MODEL||'deepseek-flash',apiKey:env.DEEPSEEK_API_KEY,
     inputRate:Number(env.AD507_INPUT_MICROUSD_PER_TOKEN||0),outputRate:Number(env.AD507_OUTPUT_MICROUSD_PER_TOKEN||0),
