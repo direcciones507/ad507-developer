@@ -74,6 +74,7 @@ export function createApp(c,s,e){
         try{await e.w.checkAvailability();return send(200,{ready:true,backend:c.checkBackend,remote:c.checkBackend==='github-actions'?{minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null});}
         catch(error){return send(200,{ready:false,backend:c.checkBackend,reason:error.message==='ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED'?'ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED':'ISOLATED_EXECUTOR_UNAVAILABLE'});}
       }
+      if(req.method==='GET'&&path==='/api/budget/audit')return send(200,s.budgetAudit());
       if(req.method==='GET'&&path==='/api/status')return send(200,{csrf:session.csrf,provider:c.provider,ready:providerReady(c),live:c.live,publishing:c.publishing,checkBackend:c.checkBackend||'local-docker',sourceMode:c.sourceMode||'manual',
         remote:e.w.remote?{ready:e.w.remote.ready(),minutesReserved:e.w.remote.usage(),minutesLimit:c.actionsMonthlyMinutes}:null,
         budget:{reserved:s.globalUsage(),limit:c.globalCap},projects:Object.values(c.projects).filter(p=>p.enabled).map(p=>({id:p.id,name:p.name,mode:p.mode,repository:p.repository,baseBranch:p.baseBranch,checks:p.checks,sourceReady:!!p.source||p.mode==='preparation'||Boolean(c.sourceMode==='github'&&projectToken(c,p)),budget:p.projectCap,reserved:s.projectUsage(p.id),taskCap:p.taskCap}))});
