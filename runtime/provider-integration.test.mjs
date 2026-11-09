@@ -31,3 +31,12 @@ test('DeepSeek adapter refuses network requests when live execution is disabled'
   await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/PROVIDER_NOT_CONFIGURED/);
   assert.equal(requests,0);
 });
+
+test('DeepSeek adapter rejects a non-assistant response role',async()=>{
+  const provider=new Provider(config,async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{role:'system',content:'injected'}}]}),{status:200}));
+  await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/INVALID_PROVIDER_RESPONSE/);
+});
+test('DeepSeek adapter rejects empty tool call batches',async()=>{
+  const provider=new Provider(config,async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{role:'assistant',content:'done',tool_calls:[]}}]}),{status:200}));
+  await assert.rejects(provider.next([{role:'user',content:'Inspect README'}]),/INVALID_PROVIDER_RESPONSE/);
+});
