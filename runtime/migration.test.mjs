@@ -36,7 +36,7 @@ test('repeated read returns a reference without copying content and persists sto
  await e.tick();const j=s.get(task.id),p=c.projects[j.project];
  const tool=call('read_repository_file',{path:'docs/ad507-simulation.md'});
  let reads=0;const original=w.read.bind(w);w.read=async(...args)=>{reads++;return original(...args);};
- const first=await e.execute(j,p,tool,AbortSignal.timeout(1000));assert.match(first,/AD507 Developer/);s.save(j);
+ const first=await e.execute(j,p,tool,AbortSignal.timeout(1000));assert.match(first,/AS Developer/);s.save(j);
  const restored=s.get(j.id);const second=await e.execute(restored,p,tool,AbortSignal.timeout(1000));
  assert.equal(second.status,'already_read');assert.equal(reads,1);assert.equal(restored.noProgress,true);
  await e.execute(restored,p,call('write_repository_file',{path:'docs/ad507-simulation.md',content:'New revision'}),AbortSignal.timeout(1000));
