@@ -16,7 +16,7 @@ test('untrusted check runs only in restricted Docker and cleans its snapshot',as
   };
   try{
     const workspace=new Workspace({root,sandboxImage:'ad507-checks:remote',env:{},checkBackend:'local-docker'}, {containerExec});
-    const result=await workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','typecheck',new AbortController().signal);
+    const result=await workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','project-syntax',new AbortController().signal);
     assert.equal(result.passed,true);
     const run=calls.find(call=>call.args[0]==='run');
     assert.ok(run);
