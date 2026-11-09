@@ -53,6 +53,8 @@ test('cancel in-flight request is durable and never auto-resumes',async t=>{
 });
 test('task and lifetime project caps are reserved transactionally before calls',async t=>{
   const {e,s,c}=await fixture(t);c.projects['junta-comunal-santiago'].projectCap=3;
+  // A provider without reported usage must retain the full reservation.
+  const simulatedNext=e.provider.next.bind(e.provider);e.provider.next=async (...args)=>{const response=await simulatedNext(...args);delete response.usage;return response;};
   const first=e.create({project:'junta-comunal-santiago',instructions:'Prepare docs',budget:2});await e.tick();assert.equal(s.get(first.id).reason,'BUDGET_EXHAUSTED');assert.equal(s.get(first.id).reserved,2);
   const second=e.create({project:'junta-comunal-santiago',instructions:'Prepare docs',budget:3});await e.tick();assert.equal(s.get(second.id).reserved,1);assert.equal(s.projectUsage(second.project),3);
 });
