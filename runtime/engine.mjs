@@ -15,8 +15,8 @@ export class Engine {
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
     if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
-    const cap=budget??Math.min(p.taskCap,p.projectCap);
-    if(!Number.isSafeInteger(cap)||cap<=0||cap>p.taskCap||cap>p.projectCap)throw Error('INVALID_BUDGET');
+    const cap=budget??this.s.globalBudgetLimit(this.c.globalCap);
+    if(!Number.isSafeInteger(cap)||cap<=0||cap>this.s.globalBudgetLimit(this.c.globalCap))throw Error('INVALID_BUDGET');
     if(this.s.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN ('completed','failed','cancelled')").get().n>=100)throw Error('QUEUE_FULL');
     const t=this.s.create(project,instructions.trim(),cap,this.c.provider);
     if(classifyTask(actionablePolicyText(instructions)).approvalRequired){t.state='awaiting_approval';t.gate='scope';t.reason='La instrucción cruza una acción protegida. Rechazar y crear una tarea de desarrollo sin esa operación.';this.s.save(t);this.s.event(t.id,'scope_blocked');}
@@ -88,7 +88,7 @@ export class Engine {
         if(t.noProgress)throw Error('NO_PROGRESS');
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
-        const amount=this.provider.estimate(t.messages);const reservationId=this.s.reserve(t,amount,p.projectCap,this.s.globalBudgetLimit(this.c.globalCap));
+        const amount=this.provider.estimate(t.messages);const reservationId=this.s.reserve(t,amount,Number.MAX_SAFE_INTEGER,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
         const response=await this.provider.next(t.messages,controller.signal);
         controller.signal.throwIfAborted();
