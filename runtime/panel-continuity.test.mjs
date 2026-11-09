@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const html=await readFile(new URL('./panel.html',import.meta.url),'utf8');
+const js=await readFile(new URL('./panel.js',import.meta.url),'utf8');
+test('AS Developer reuses one owner panel and retains existing workflows',()=>{
+  assert.match(html,/<title>AS Developer<\/title>/);
+  assert.match(html,/id="login-form"/);
+  assert.match(html,/id="email"/);
+  assert.match(html,/id="password"/);
+  assert.match(html,/id="project"/);
+  assert.match(html,/id="task-form"/);
+  assert.match(html,/id="tasks"/);
+  assert.match(html,/id="detail"/);
+  assert.match(html,/id="controls"/);
+  assert.match(html,/id="checks"/);
+  assert.match(html,/id="remote-checks"/);
+  assert.match(html,/id="project-registration"/);
+  assert.match(html,/id="logout"/);
+  assert.doesNotMatch(html,/id="signup"|id="register-user"/);
+  assert.match(html,/Publicar en producción requiere aprobación independiente/);
+  assert.match(js,/login-form/);
+});
