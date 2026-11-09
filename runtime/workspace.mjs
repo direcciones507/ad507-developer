@@ -94,7 +94,8 @@ export class Workspace {
     }catch(error){await rm(snapshot,{recursive:true,force:true});throw error;}
   }
   async checkAvailability(){
-    if(this.c.checkBackend!=='local-docker')throw Error('GITHUB_ACTIONS_DISABLED');
+    if(this.c.checkBackend==='github-actions'){if(!this.remote?.ready())throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');return;}
+    if(this.c.checkBackend!=='local-docker')throw Error('INVALID_CHECK_BACKEND');
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     try{await this.containerExec('docker',['image','inspect',this.c.sandboxImage],{env:{PATH:process.env.PATH},timeout:10000,maxBuffer:16000});}
     catch{throw Error('SANDBOX_NOT_AVAILABLE');}
@@ -103,7 +104,7 @@ export class Workspace {
     registeredProject(this.c,p);if(t.project!==p.id)throw Error('PROJECT_NOT_AUTHORIZED');
     await this.branch(t);
     const command=requireCheck(p,name);
-    if(this.c.checkBackend==='github-actions')throw Error('GITHUB_ACTIONS_DISABLED');
+    if(this.c.checkBackend==='github-actions'){if(!this.remote)throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');return this.remote.run(t,p,name,signal);}
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     const root=this.root(t);const container=`ad507-${t.id}`;
     const snapshot=await this.snapshot(t);
