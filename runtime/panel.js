@@ -19,7 +19,7 @@ async function refresh(){
   if(previousProject)$('project').value=successor(previousProject)?.id||previous;
   else if(preferred)$('project').value=successor(preferred).id;
   projectInfo();
-  const tasks=await api('tasks');$('tasks').replaceChildren();if(!tasks.length)$('tasks').append(node('p','Todavía no hay trabajos.'));
+  const tasks=await api('tasks');const counts={active:0,review:0,done:0,failed:0};for(const task of tasks){if(['pending','running','paused'].includes(task.state))counts.active++;else if(task.state==='awaiting_approval')counts.review++;else if(task.state==='completed')counts.done++;else counts.failed++;}$('task-counts').textContent=`En curso: ${counts.active} · Para revisar: ${counts.review} · Completados: ${counts.done} · Cerrados sin completar: ${counts.failed}`;$('tasks').replaceChildren();if(!tasks.length)$('tasks').append(node('p','Todavía no hay trabajos.'));
   for(const t of tasks){const b=node('button',`${taskState(t.state,t.gate)} · ${t.project}`);b.className='task';b.append(node('small',t.instructions.slice(0,100)));b.addEventListener('click',()=>detail(t.id).catch(showError));$('tasks').append(b);}
   if(selected)await detail(selected);
 }
