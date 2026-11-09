@@ -50,3 +50,35 @@ test('failed isolated check stays failed, without host fallback, and removes sna
     await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('sandbox preflight fails closed when Docker is unavailable',async()=>{
+  const calls=[];
+  const workspace=new Workspace({root:'/tmp/unused',sandboxImage:'ad507-checks:reviewed',checkBackend:'local-docker'},{
+    containerExec:async(program,args)=>{calls.push([program,...args]);throw Object.assign(Error('docker not installed'),{code:'ENOENT'});}
+  });
+  await assert.rejects(workspace.checkAvailability(),/SANDBOX_NOT_AVAILABLE/);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0][0],'docker');
+  assert.equal(calls[0][1],'image');
+  assert.ok(!calls.some(c=>c[0]==='node'||c[0]==='sh'));
+});
+
+test('missing Docker during execution refuses host fallback and removes snapshot',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'as-developer-no-docker-'));
+  const snapshot=join(root,'snapshot');
+  await mkdir(snapshot);
+  const calls=[];
+  const workspace=new Workspace({root,sandboxImage:'ad507-checks:reviewed',env:{},checkBackend:'local-docker'},{
+    containerExec:async(program,args)=>{
+      calls.push([program,...args]);
+      if(args[0]==='run')throw Object.assign(Error('docker not installed'),{code:'ENOENT'});
+      return {stdout:'',stderr:''};
+    }
+  });
+  try{
+    await assert.rejects(workspace.runSnapshot(snapshot,'12345678-1234-1234-1234-123456789abc','project-syntax',new AbortController().signal),/SANDBOX_NOT_AVAILABLE/);
+    assert.deepEqual(calls.map(c=>c[0]),['docker','docker']);
+    assert.deepEqual(calls.map(c=>c[1]),['run','rm']);
+    await assert.rejects(import('node:fs/promises').then(fs=>fs.stat(snapshot)),{code:'ENOENT'});
+  }finally{await rm(root,{recursive:true,force:true});}
+});
