@@ -85,7 +85,14 @@ export class Engine {
           t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
           this.checkpoint(t);this.s.event(t.id,'tool_completed',{tool:call.function.name,files:t.files,...(call.function.name==='list_repository_files'?{listing:{status:result.status,totalFiles:result.totalFiles,matchedCount:result.matchedCount,paths:result.files.slice(0,50)}}:{})});continue;
         }
-        if(t.noProgress)throw Error('NO_PROGRESS');
+        if(t.noProgress){
+          if(t.noProgressRecoveryAttempted)throw Error('NO_PROGRESS');
+          t.noProgressRecoveryAttempted=true;t.noProgress=false;t.emptyObservations=0;t.observationCounts={};
+          const inventory=await this.w.list(t,'');
+          const recoveryHint='Recovery: recent file searches did not match. File queries are literal substrings, not globs. Actual paths include: '+inventory.slice(0,35).join(', ')+'. Do not repeat the failed queries. Read an exact path from this inventory, or finish with a concise report based on evidence already collected. Do not invent files.';
+          t.messages.push({role:'user',content:recoveryHint});
+          this.checkpoint(t);this.s.event(t.id,'search_recovery',{availableFiles:inventory.length,attempt:1});
+        }
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
         const availableBudget=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
@@ -144,7 +151,7 @@ export class Engine {
       catch(error){if(error.message!=='FILE_NOT_FOUND')throw error;this.observe(t,'missing:'+args.path,true);return {status:'not_found',hint:'File does not exist in this task checkout. List files with query empty string; do not guess paths.'};}
     }
     if(['write_repository_file','replace_repository_text'].includes(name)&&readOnlyTask(t.instructions))throw Error('READ_ONLY_TASK');
-    if(name==='write_repository_file'){const result=await this.w.write(t,p,args.path,args.content);t.revision=(t.revision||0)+1;t.noProgress=false;return result;}
+    if(name==='write_repository_file'){const result=await this.w.write(t,p,args.path,args.content);t.revision=(t.revision||0)+1;t.noProgress=false;t.noProgressRecoveryAttempted=false;return result;}
     if(name==='replace_repository_text'){const result=await this.w.replace(t,p,args.path,args.oldText,args.newText);if(!result?.error){t.revision=(t.revision||0)+1;t.noProgress=false;}return result;}
     if(name==='inspect_diff')return this.w.diff(t);
     if(name==='run_safe_check'){
