@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);let csrf='',selected=null,status=null,busy=false;
+const $=id=>document.getElementById(id);let csrf='',selected=null,status=null,busy=false,showAllTasks=false;
 const labels={pending:'Pendiente',running:'Ejecutando',paused:'Pausado',awaiting_approval:'Esperando aprobación',completed:'Completado',failed:'Fallido',cancelled:'Cancelado'};
 const money=n=>'$'+(n/1000000).toFixed(4);
 const taskState=(state,gate)=>state==='awaiting_approval'?(gate==='recovery'?'Revisión de recuperación':gate==='delivery'?'Entrega lista para revisión':'Requiere autorización'):labels[state]||state;
@@ -19,8 +19,10 @@ async function refresh(){
   if(previousProject)$('project').value=successor(previousProject)?.id||previous;
   else if(preferred)$('project').value=successor(preferred).id;
   projectInfo();
-  const tasks=await api('tasks');$('tasks').replaceChildren();if(!tasks.length)$('tasks').append(node('p','Todavía no hay trabajos.'));
-  for(const t of tasks){const b=node('button',`${labels[t.state]} · ${t.project}`);b.className='task';b.append(node('small',t.instructions.slice(0,100)));b.addEventListener('click',()=>detail(t.id).catch(showError));$('tasks').append(b);}
+  const tasks=await api('tasks');const filter=$('task-filter').value;const filtered=tasks.filter(t=>filter==='all'||(filter==='active'&&['pending','running','paused'].includes(t.state))||(filter==='review'&&t.state==='awaiting_approval')||(filter==='completed'&&t.state==='completed')||(filter==='closed'&&['failed','cancelled'].includes(t.state)));$('tasks').replaceChildren();if(!filtered.length)$('tasks').append(node('p','No hay trabajos en esta categoría.'));
+  for(const t of (showAllTasks?filtered:filtered.slice(0,3))){const b=node('button',`${labels[t.state]||t.state} · ${t.project}`);b.className='task';b.append(node('small',t.instructions.slice(0,100)));b.addEventListener('click',async()=>{try{await detail(t.id);$('detail').scrollIntoView({behavior:'smooth',block:'start'});}catch(error){showError(error);}});$('tasks').append(b);}
+  if(filtered.length>3){const more=node('button',showAllTasks?'Mostrar menos':`Ver todos los trabajos (${filtered.length})`);more.type='button';more.className='secondary';more.addEventListener('click',()=>{showAllTasks=!showAllTasks;refresh().catch(showError);});$('tasks').append(more);}
+  $('task-counts').textContent=`Mostrando ${Math.min(filtered.length,showAllTasks?filtered.length:3)} de ${filtered.length} trabajos${filter==='all'?'': ' filtrados'}.`;
   if(selected)await detail(selected);
 }
 async function detail(id){if(selected!==id){$('file-content').hidden=true;$('file-content').textContent='';}selected=id;const t=await api('tasks/'+id);$('detail').hidden=false;$('task-title').textContent=t.project+' · '+id.slice(0,8);$('task-state').textContent=labels[t.state];$('task-reason').textContent=t.reason||'';
@@ -46,6 +48,6 @@ $('check-hash').addEventListener('click',async()=>{
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();try{const r=await api('login','POST',{email:$('email').value,password:$('password').value});$('password').value='';csrf=r.csrf;$('message').textContent='';$('message').hidden=true;await refresh();}catch(err){showError(err);}});
 $('task-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const t=await api('tasks','POST',{project:$('project').value,instructions:$('instructions').value,budget:Math.round(Number($('budget').value)*1000000)});$('instructions').value='';selected=t.id;$('message').textContent='';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
 $('project-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('projects','POST',{id:$('project-id').value,name:$('project-name').value,repository:$('project-repo').value||null,baseBranch:$('project-base').value,mode:$('project-mode').value,authorize:$('project-consent').checked});$('project-form').reset();$('message').textContent='Proyecto autorizado y guardado. Configura su acceso GitHub por separado.';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
-$('project').addEventListener('change',projectInfo);$('logout').addEventListener('click',async()=>{try{await api('logout','POST',{});location.reload();}catch(e){showError(e);}});
+$('task-filter').addEventListener('change',()=>{showAllTasks=false;refresh().catch(showError);});$('project').addEventListener('change',projectInfo);$('logout').addEventListener('click',async()=>{try{await api('logout','POST',{});location.reload();}catch(e){showError(e);}});
 refresh().catch(e=>{if(e.message!=='AUTHENTICATION_REQUIRED')showError(e);});
 setInterval(async()=>{if(document.hidden||busy||$('app').hidden)return;busy=true;try{await refresh();}catch(e){showError(e);}finally{busy=false;}},3000);
