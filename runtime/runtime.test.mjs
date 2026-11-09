@@ -22,7 +22,7 @@ const task=e=>e.create({project:'junta-comunal-santiago',instructions:'Preparar 
 test('task simulation creates real isolated Git branch and file, then awaits human review',async t=>{
   const {e,s,w}=await fixture(t);const job=task(e);assert.equal(job.state,'pending');await e.tick();const result=s.get(job.id);
   assert.equal(result.state,'awaiting_approval');assert.equal(result.gate,'delivery');assert.match(result.branch,/^ad507\/task-/);
-  assert.deepEqual(result.files,['docs/ad507-simulation.md']);assert.match(await w.read(result,'docs/ad507-simulation.md'),/AD507 Developer/);
+  assert.deepEqual(result.files,['docs/ad507-simulation.md']);assert.match(await w.read(result,'docs/ad507-simulation.md'),/AS Developer/);
   assert.equal(await git(w.root(result),['branch','--show-current']),result.branch);
   assert.equal((await git(w.root(result),['show','main:docs/ad507-simulation.md']).catch(()=>'')),'');
   assert.equal(e.control(result.id,'approve').state,'completed');assert.equal(s.events(job.id).some(v=>v.kind==='owner_approve'),true);
