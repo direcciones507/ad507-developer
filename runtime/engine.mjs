@@ -79,8 +79,9 @@ export class Engine {
           let result;try{result=await this.execute(t,p,call,controller.signal);}catch(e){
             if(controller.signal.aborted)throw e;
             // Validation failures are critical; do not let a model keep probing permissions.
-            this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:['FILE_NOT_FOUND','REPOSITORY_READ_FAILED'].includes(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED'});
-            throw Error(['REPOSITORY_READ_FAILED','SANDBOX_NOT_AVAILABLE','REMOTE_DISPATCH_UNCERTAIN','ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED','ACTIONS_MINUTES_EXHAUSTED'].includes(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED');
+            const safeCode=/^(?:CHECK_NOT_AUTHORIZED|ACTIONS_HTTP_\d{3}|ACTIONS_MINUTES_EXHAUSTED|ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED|PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED|REMOTE_DISPATCH_UNCERTAIN|REMOTE_CHECK_FAILED|SANDBOX_NOT_AVAILABLE|REPOSITORY_READ_FAILED|FILE_NOT_FOUND|CHECK_ABORTED|RUNNER_IDENTITY_REJECTED|SNAPSHOT_TOO_LARGE)$/.test(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED';
+            this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:safeCode});
+            throw Error(safeCode);
           }
           t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
           this.checkpoint(t);this.s.event(t.id,'tool_completed',{tool:call.function.name,files:t.files,...(call.function.name==='list_repository_files'?{listing:{status:result.status,totalFiles:result.totalFiles,matchedCount:result.matchedCount,paths:result.files.slice(0,50)}}:{})});continue;
