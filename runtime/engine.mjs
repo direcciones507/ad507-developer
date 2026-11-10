@@ -159,6 +159,10 @@ export class Engine {
     if(name==='replace_repository_text'){const result=await this.w.replace(t,p,args.path,args.oldText,args.newText);if(!result?.error){t.revision=(t.revision||0)+1;t.noProgress=false;}return result;}
     if(name==='inspect_diff')return this.w.diff(t);
     if(name==='run_safe_check'){
+      // Owner-selected development flow: no automatic remote dispatch.
+      // Never misrepresent a skipped check as passed.
+      this.s.event(t.id,'automatic_check_skipped',{check:args.check,reason:'OWNER_DEVELOPMENT_FLOW'});
+      return {check:args.check,passed:false,skipped:true,reason:'AUTOMATED_CHECKS_DISABLED_FOR_DEVELOPMENT',hint:'Continue implementing requested code. Deliver the diff as unverified for human review; do not retry checks.'};
       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.
       const readOnly=readOnlyTask(t.instructions);
       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}
