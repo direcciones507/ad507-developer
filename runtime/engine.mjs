@@ -221,6 +221,12 @@ export class Engine {
       let result;
       try { result=await this.w.run(t,p,args.check,signal); }
       catch(error){
+        if(error.message==='CHECK_NOT_AUTHORIZED'){
+          // This is a model-selected unsupported check, not a fatal task error.
+          // Do not execute it, record a passing check, or relax the allowlist.
+          this.s.event(t.id,'check_rejected',{requested:args.check,allowedChecks:p.checks||[]});
+          return {check:args.check,passed:false,skipped:true,reason:'CHECK_NOT_AUTHORIZED',allowedChecks:p.checks||[],hint:'Choose one of allowedChecks. The rejected check was not executed.'};
+        }
         if(error.message!=='SANDBOX_NOT_AVAILABLE')throw error;
         const changed=await this.w.diff(t);
         if(changed.length>0)throw error; // Never waive the check gate for modified code.
