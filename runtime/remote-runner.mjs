@@ -40,7 +40,7 @@ export async function prepareRemote({origin,id,ticket,identity,directory,allowLo
   try {
     const seen=new Set();let total=0;
     for(const file of payload.files){validatePath(file.path);if(seen.has(file.path)||typeof file.content!=='string')throw Error('RUNNER_PAYLOAD_REJECTED');seen.add(file.path);
-      const content=Buffer.from(file.content,'base64');if(content.toString('base64')!==file.content||content.length>4000000||(total+=content.length)>16000000)throw Error('RUNNER_PAYLOAD_REJECTED');
+      const content=Buffer.from(file.content,'base64');if(content.toString('base64')!==file.content||content.length>8000000||(total+=content.length)>32000000)throw Error('RUNNER_PAYLOAD_REJECTED');
       const target=join(snapshot,file.path);await mkdir(dirname(target),{recursive:true,mode:0o755});await writeFile(target,content,{flag:'wx',mode:0o644});}
     const context={origin,id,identity,snapshot,check:payload.check,snapshotHash:payload.snapshotHash};
     await writeFile(join(directory,'context.json'),JSON.stringify(context),{mode:0o600});return context;
