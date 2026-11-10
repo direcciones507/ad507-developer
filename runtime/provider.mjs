@@ -6,6 +6,11 @@ export const tools = [
   ['run_safe_check','Run an allowlisted check in a network-disabled sandbox.',{check:{type:'string',enum:['agent-test','agent-typecheck','api-typecheck','api-build','project-syntax','project-test','standalone-agent-test']}}],
   ['inspect_diff','Inspect changed file names on the task branch.',{}]
 ].map(([name,description,properties])=>({type:'function',function:{name,description,parameters:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}));
+export function toolsForProject(project){
+  const allowed=project?.checks;
+  if(!Array.isArray(allowed))return tools;
+  return tools.map(tool=>tool.function.name!=='run_safe_check'?tool:{...tool,function:{...tool.function,parameters:{...tool.function.parameters,properties:{...tool.function.parameters.properties,check:{...tool.function.parameters.properties.check,enum:[...allowed]}}}}});
+}
 const endpoint='https://api.deepseek.com/chat/completions';
 export class Provider {
   constructor(config,fetchImpl=fetch){this.c=config;this.fetch=fetchImpl;}
@@ -16,14 +21,14 @@ export class Provider {
     const amount=Math.ceil(bytes*this.c.inputRate+maxOutput*this.c.outputRate);
     if(!Number.isSafeInteger(amount)||amount<=0)throw Error('PRICING_REQUIRED');return amount;
   }
-  async next(messages,signal,maxOutput=this.c.maxOutput){
+  async next(messages,signal,maxOutput=this.c.maxOutput,project=null){
     if(!Number.isSafeInteger(maxOutput)||maxOutput<1||maxOutput>this.c.maxOutput)throw Error('INVALID_OUTPUT_LIMIT');
     if(!this.c.live||!this.c.apiKey||!this.c.model)throw Error('PROVIDER_NOT_CONFIGURED');
     if(this.c.provider!=='deepseek')throw Error('DEEPSEEK_ONLY');
     validateToolSequence(messages);
     const res=await this.fetch(endpoint,{method:'POST',redirect:'error',signal,
       headers:{Authorization:`Bearer ${this.c.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:this.c.model,messages,tools,max_tokens:maxOutput})});
+      body:JSON.stringify({model:this.c.model,messages,tools:toolsForProject(project),max_tokens:maxOutput})});
     // Never persist provider error bodies: they can include sensitive request details.
     if(!res.ok){
       // Log only a bounded, allowlisted error classification; never log provider messages or request bodies.

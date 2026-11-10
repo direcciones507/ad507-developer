@@ -145,7 +145,7 @@ export class Engine {
         if(outputAllowance<1){this.s.event(t.id,'budget_insufficient_for_next_call',{taskRemaining:Math.max(0,t.budget-t.reserved),globalRemaining:Math.max(0,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage()),inputEstimate,requiredMinimum:inputEstimate+this.c.outputRate});throw Error('BUDGET_EXHAUSTED');}
         const amount=this.provider.estimate(t.messages,outputAllowance);const reservationId=this.s.reserve(t,amount,Number.MAX_SAFE_INTEGER,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
-        const response=await this.provider.next(t.messages,controller.signal,outputAllowance);
+        const response=await this.provider.next(t.messages,controller.signal,outputAllowance,p);
         controller.signal.throwIfAborted();
         const promptTokens=Number(response.usage?.prompt_tokens),completionTokens=Number(response.usage?.completion_tokens);
         if(Number.isSafeInteger(promptTokens)&&promptTokens>=0&&Number.isSafeInteger(completionTokens)&&completionTokens>=0){const actual=Math.ceil(promptTokens*this.c.inputRate+completionTokens*this.c.outputRate);if(actual<=amount)this.s.settle(t,reservationId,actual);}
