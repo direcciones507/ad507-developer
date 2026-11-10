@@ -8,17 +8,25 @@ export const readOnlyTask = instructions => /\b(?:solo lectura|read.only|sin mod
   || /(?:^|[.;\n])\s*(?:no modifi(?:ques|car)(?: (?:archivos|el c[oó]digo))?|no ejecutes pruebas|no ejecutar pruebas|no remote tests)\s*(?:[.;\n]|$)/i.test(instructions);
 export class Engine {
   constructor(config,store,workspace,provider,publisher){Object.assign(this,{c:config,s:store,w:workspace,provider,publisher});this.active=new Map();}
-  create({project,instructions,budget,provider}){
+  create({project,instructions,budget,provider,previousTaskId}){
     const p=projectFor(this.c,project);
     if(typeof instructions!=='string'||instructions.trim().length<5||instructions.length>16000)throw Error('INVALID_INSTRUCTIONS');
     if(/(?:sk-[a-zA-Z0-9_-]{16,}|-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,})/.test(instructions))throw Error('DO_NOT_SUBMIT_SECRETS');
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
     if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
+    let previous=null;
+    if(previousTaskId!==undefined&&previousTaskId!==null){
+      if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
+      previous=this.s.get(previousTaskId);
+      if(previous.project!==project)throw Error('PREVIOUS_TASK_PROJECT_MISMATCH');
+      if(!['completed','failed','awaiting_approval'].includes(previous.state))throw Error('PREVIOUS_TASK_NOT_READY');
+    }
     const cap=budget??this.s.globalBudgetLimit(this.c.globalCap);
     if(!Number.isSafeInteger(cap)||cap<=0||cap>this.s.globalBudgetLimit(this.c.globalCap))throw Error('INVALID_BUDGET');
     if(this.s.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN ('completed','failed','cancelled')").get().n>=100)throw Error('QUEUE_FULL');
     const t=this.s.create(project,instructions.trim(),cap,this.c.provider);
+    if(previous){t.previousTaskId=previous.id;t.previousDeliveryUrl=previous.delivery?.url||null;this.s.save(t);this.s.event(t.id,'correction_linked',{previousTaskId:previous.id,workspaceReused:false});}
     if(classifyTask(actionablePolicyText(instructions)).approvalRequired){t.state='awaiting_approval';t.gate='scope';t.reason='La instrucción cruza una acción protegida. Rechazar y crear una tarea de desarrollo sin esa operación.';this.s.save(t);this.s.event(t.id,'scope_blocked');}
     return t;
   }
