@@ -123,7 +123,7 @@ $('budget').addEventListener('input',()=>{taskBudgetManual=true;if(status)projec
 $('task-form').addEventListener('click',e=>{if(e.target.closest('button[type="submit"]')){const msg=$('message');msg.hidden=false;msg.textContent='Botón pulsado. Validando los campos…';}});
 $('task-form').addEventListener('invalid',e=>{const msg=$('message');msg.hidden=false;msg.textContent='No se puede iniciar: revisa el campo «'+(e.target.labels?.[0]?.textContent||e.target.id)+'». '+(e.target.validationMessage||'');msg.scrollIntoView({block:'center'});},true);
 $('task-form').addEventListener('submit',async e=>{e.preventDefault();
-  if(correctionSource&&/Corrige lo siguiente:\\s*$/i.test($('instructions').value)){
+  if(correctionSource&&/Corrige lo siguiente:\s*$/i.test($('instructions').value)){
     const msg=$('message');msg.hidden=false;
     msg.textContent='Falta indicar el error concreto. Este botón crearía una tarea nueva sin reutilizar los archivos originales. Abre el trabajo anterior para recuperarlo.';
     return;
