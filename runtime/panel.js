@@ -29,6 +29,22 @@ async function refresh(){
 }
 async function detail(id){if(selected!==id){$('file-content').hidden=true;$('file-content').textContent='';}selected=id;const t=await api('tasks/'+id);const events=await api('tasks/'+id+'/events');const detailSignature=JSON.stringify([id,t,events]);if(detailSignature===lastDetailSignature)return;lastDetailSignature=detailSignature;$('detail').hidden=false;$('task-title').textContent=t.project+' · '+id.slice(0,8);$('task-state').textContent=labels[t.state];$('task-reason').textContent=t.reason||'';
   $('controls').replaceChildren();let actions=[];if(['pending','running'].includes(t.state))actions.push(['pause','Pausar']);if(t.state==='paused')actions.push(['resume','Reanudar']);if(t.state==='awaiting_approval'&&t.gate!=='scope'){if(t.gate==='delivery'&&!status.publishing){const msg=$('task-action-result');msg.hidden=false;msg.textContent='Publicación de Pull Requests desactivada en Railway (AD507_PUBLISH_ENABLED). Los cambios siguen seguros en el espacio de trabajo; no se han enviado a GitHub.';}else actions.push(['approve',t.gate==='recovery'?'Revisé la interrupción; continuar':'Aprobar entrega']);actions.push(['reject','Rechazar']);}if(!['completed','failed','cancelled'].includes(t.state))actions.push(['cancel','Cancelar']);
+  if(t.state==='failed'&&t.reason==='TASK_TIMEOUT'&&t.phase==='model'&&t.branch){
+    const resumeOriginal=node('button','Retomar tarea original sin crear otra');resumeOriginal.type='button';resumeOriginal.className='secondary';
+    resumeOriginal.addEventListener('click',async()=>{
+      resumeOriginal.disabled=true;
+      try{
+        const resumed=await api('tasks/'+id+'/control','POST',{action:'resume_failed'});
+        await refresh();
+        const out=$('task-action-result');out.hidden=false;
+        out.textContent='Tarea original recuperada con el mismo presupuesto autorizado. Estado: '+(resumed.state||'pendiente')+'.';
+      }catch(e){
+        const out=$('task-action-result');out.hidden=false;
+        out.textContent='No se recuperó el trabajo: '+e.message+'. No se creó otra tarea.';
+      }finally{resumeOriginal.disabled=false;}
+    });
+    $('controls').append(resumeOriginal);
+  }
   if(t.state==='failed'&&['BUDGET_EXHAUSTED','CHECK_NOT_AUTHORIZED'].includes(t.reason)&&t.files?.length){
     const recover=node('button','Recuperar cambios sin gastar en IA');recover.type='button';recover.className='secondary';
     recover.addEventListener('click',async()=>{recover.disabled=true;try{await api('tasks/'+id+'/control','POST',{action:'recover'});await refresh();}catch(e){showError(e);}finally{recover.disabled=false;}});
@@ -52,11 +68,17 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
   if(completed)overview.append(node('p','Puedes revisar el resumen y solicitar una corrección con un nuevo trabajo. Aprobar entrega prepara la siguiente etapa de revisión; no significa publicar directamente en producción.'));
   if(t.state==='failed')overview.append(node('p','Motivo del fallo: '+(t.reason||'No especificado')+'.'));
   const deliveryActions=$('delivery-actions');deliveryActions.replaceChildren();
+  if(t.previousTaskId){
+    const original=node('button','Abrir trabajo original');original.type='button';original.className='secondary';
+    original.addEventListener('click',async()=>{try{await detail(t.previousTaskId);$('detail').scrollIntoView({behavior:'smooth',block:'start'});}catch(error){showError(error);}});
+    deliveryActions.append(original);
+  }
+
   const viewResult=node('button','Ver resultado');viewResult.type='button';viewResult.className='secondary';
   viewResult.addEventListener('click',()=>overview.scrollIntoView({behavior:'smooth',block:'start'}));
   deliveryActions.append(viewResult);
-  if(['awaiting_approval','completed','failed'].includes(t.state)){
-    const correction=node('button','Solicitar corrección');correction.type='button';correction.className='secondary';
+  if(['awaiting_approval','completed','failed'].includes(t.state)&&!(t.state==='failed'&&t.reason==='TASK_TIMEOUT')){
+    const correction=node('button','Crear nueva tarea de corrección');correction.type='button';correction.className='secondary';
     correction.addEventListener('click',()=>{
       const target=status?.projects?.find(p=>p.id===t.project);
       if(!target)return showError(new Error('PROYECTO_NO_DISPONIBLE'));
@@ -100,7 +122,13 @@ const auditButton=node('button','Auditar reservas del presupuesto');auditButton.
 $('budget').addEventListener('input',()=>{taskBudgetManual=true;if(status)projectInfo();});
 $('task-form').addEventListener('click',e=>{if(e.target.closest('button[type="submit"]')){const msg=$('message');msg.hidden=false;msg.textContent='Botón pulsado. Validando los campos…';}});
 $('task-form').addEventListener('invalid',e=>{const msg=$('message');msg.hidden=false;msg.textContent='No se puede iniciar: revisa el campo «'+(e.target.labels?.[0]?.textContent||e.target.id)+'». '+(e.target.validationMessage||'');msg.scrollIntoView({block:'center'});},true);
-$('task-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const t=await api('tasks','POST',{project:$('project').value,instructions:$('instructions').value,budget:Math.round(Number($('budget').value)*1000000),...(correctionSource?{previousTaskId:correctionSource}:{})});$('instructions').value='';correctionSource=null;taskBudgetManual=false;selected=t.id;$('message').textContent='';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
+$('task-form').addEventListener('submit',async e=>{e.preventDefault();
+  if(correctionSource&&/Corrige lo siguiente:\s*$/i.test($('instructions').value)){
+    const msg=$('message');msg.hidden=false;
+    msg.textContent='Falta indicar el error concreto. Este botón crearía una tarea nueva sin reutilizar los archivos originales. Abre el trabajo anterior para recuperarlo.';
+    return;
+  }
+  const b=e.submitter;b.disabled=true;try{const t=await api('tasks','POST',{project:$('project').value,instructions:$('instructions').value,budget:Math.round(Number($('budget').value)*1000000),...(correctionSource?{previousTaskId:correctionSource}:{})});$('instructions').value='';correctionSource=null;taskBudgetManual=false;selected=t.id;$('message').textContent='';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
 $('project-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('projects','POST',{id:$('project-id').value,name:$('project-name').value,repository:$('project-repo').value||null,baseBranch:$('project-base').value,mode:$('project-mode').value,authorize:$('project-consent').checked});$('project-form').reset();$('message').textContent='Proyecto autorizado y guardado. Configura su acceso GitHub por separado.';await refresh();}catch(err){showError(err);}finally{b.disabled=false;}});
 $('task-filter').addEventListener('change',()=>{showAllTasks=false;refresh().catch(showError);});$('project').addEventListener('change',()=>{correctionSource=null;projectInfo();});$('logout').addEventListener('click',async()=>{try{await api('logout','POST',{});location.reload();}catch(e){showError(e);}});
 refresh().catch(e=>{if(e.message!=='AUTHENTICATION_REQUIRED')showError(e);});
