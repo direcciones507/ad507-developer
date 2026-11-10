@@ -88,7 +88,7 @@ export class Workspace {
     try{await chmod(snapshot,0o755);let bytes=0;
       for(const path of await this.list(t)){
         const source=await safePath(root,path,false);const size=(await lstat(source)).size;bytes+=size;
-        if(size>4000000||bytes>16000000)throw Error('SANDBOX_SNAPSHOT_LIMIT');
+        if(size>8000000||bytes>32000000)throw Error('SANDBOX_SNAPSHOT_LIMIT');
         const dest=join(snapshot,path);await mkdir(dirname(dest),{recursive:true,mode:0o755});await copyFile(source,dest);await chmod(dest,0o644);
       }return snapshot;
     }catch(error){await rm(snapshot,{recursive:true,force:true});throw error;}
