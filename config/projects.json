@@ -54,6 +54,15 @@
       "baseBranch": "recovery/mi-contacto-existing-20261101",
       "productionWrite": false,
       "mergeMain": false
+    },
+    "as-developer": {
+      "name": "AS Developer (sistema del agente)",
+      "enabled": true,
+      "mode": "development",
+      "repository": "direcciones507/ad507-developer",
+      "baseBranch": "work/as-developer-agent-start-20261109",
+      "productionWrite": false,
+      "mergeMain": false
     }
   }
 }
