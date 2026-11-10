@@ -83,9 +83,10 @@ export class Engine {
             this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:safeCode});
             throw Error(safeCode);
           }
-          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});if(call.function.name==='read_repository_file' && !t.files?.length){t.readsWithoutEdit=(t.readsWithoutEdit||0)+1;if(t.readsWithoutEdit===8)t.messages.push({role:'user',content:'You have inspected eight files without editing. Stop broad exploration. Make one safe, focused code change using a write tool now, or explain precisely why no safe change can be made. Do not request further file reads.'});}t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
+          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});if(call.function.name==='read_repository_file' && !t.files?.length){t.readsWithoutEdit=(t.readsWithoutEdit||0)+1;if(t.readsWithoutEdit===8)t.needsEditReminder=true;}t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
           this.checkpoint(t);this.s.event(t.id,'tool_completed',{tool:call.function.name,files:t.files,...(call.function.name==='list_repository_files'?{listing:{status:result.status,totalFiles:result.totalFiles,matchedCount:result.matchedCount,paths:result.files.slice(0,50)}}:{})});continue;
         }
+        if(t.needsEditReminder){t.needsEditReminder=false;t.messages.push({role:'user',content:'You have inspected eight files without editing. Stop broad exploration. Make one safe, focused code change using a write tool now, or explain precisely why no safe change can be made. Do not request further file reads.'});this.checkpoint(t);}
         if(t.noProgress){
           if(t.noProgressRecoveryAttempted)throw Error('NO_PROGRESS');
           t.noProgressRecoveryAttempted=true;t.noProgress=false;t.emptyObservations=0;t.observationCounts={};
