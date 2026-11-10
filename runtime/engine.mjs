@@ -243,5 +243,5 @@ export class Engine {
     // Persisted with the tool checkpoint. Stop before reserving another model call.
     if(count>=2||t.emptyObservations>=3)t.noProgress=true;
   }
-  async stop(){for(const [id,controller] of this.active){const t=this.s.get(id);if(t.state==='running'){t.state='awaiting_approval';t.gate='recovery';t.reason='Servidor detenido. Revisar el último paso antes de continuar.';this.s.save(t);this.s.event(id,'graceful_recovery_required');}controller.abort();}while(this.active.size)await new Promise(r=>setTimeout(r,10));}
+  async stop(){for(const [id,controller] of this.active){const t=this.s.get(id);if(t.state==='running'){if(!t.inflight){t.state='pending';t.reason='Reanudación automática tras reinicio del servidor.';this.s.save(t);this.s.event(id,'graceful_restart_queued');}else{t.state='awaiting_approval';t.gate='recovery';t.reason='Operación interrumpida durante reinicio. Revisar antes de continuar para evitar duplicados.';this.s.save(t);this.s.event(id,'graceful_recovery_required');}}controller.abort();}while(this.active.size)await new Promise(r=>setTimeout(r,10));}
 }
