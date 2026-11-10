@@ -71,6 +71,38 @@ export class ActionsChecks {
       if(rejected)this.releaseRejected(job,'ACTIONS_HTTP_403');
     }
   }
+  async reconcileFinishedRuns() {
+    // Reservations are upper bounds, not actual GitHub runner minutes.
+    // Only settle runs whose GitHub API status is definitively completed.
+    const rows=this.s.db.prepare("SELECT data FROM remote_checks WHERE state IN ('claimed','queued','completed','failed','expired')").all();
+    for(const row of rows){
+      const job=JSON.parse(row.data);
+      if(!job.runId||job.minutesReleased||job.minutesSettled)continue;
+      let run,jobs;
+      try{
+        run=await this.api('actions/runs/'+job.runId);
+        if(run.status!=='completed')continue;
+        jobs=await this.api('actions/runs/'+job.runId+'/jobs?per_page=100');
+      }catch{continue;}
+      if(!Array.isArray(jobs.jobs)||jobs.total_count>100)continue;
+      const billed=jobs.jobs.reduce((sum,item)=>{
+        if(!item.started_at||!item.completed_at)return sum;
+        const seconds=Math.max(0,(Date.parse(item.completed_at)-Date.parse(item.started_at))/1000);
+        return sum+Math.max(1,Math.ceil(seconds/60));
+      },0);
+      const actual=Math.min(job.minutes,Math.max(1,billed));
+      this.s.tx(()=>{
+        const fresh=this.get(job.id);
+        if(fresh.minutesSettled||fresh.minutesReleased)return;
+        const refund=fresh.minutes-actual;
+        const month=new Date(fresh.created).toISOString().slice(0,7);
+        for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+          this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(refund,scope);
+        fresh.minutesSettled=actual;this.put(fresh);
+        this.s.event(fresh.task,'remote_check_minutes_settled',{id:fresh.id,reserved:fresh.minutes,actual,refunded:refund,conclusion:run.conclusion});
+      });
+    }
+  }
   async api(path, method = 'GET', body) {
     if (!this.c.actionsToken) throw Error('ACTIONS_TOKEN_REQUIRED');
     const response = await this.fetch(`https://api.github.com/repos/${repo}/${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
@@ -93,6 +125,7 @@ export class ActionsChecks {
   }
   async run(t, project, name, signal) {
     requireCheck(project, name); signal.throwIfAborted();
+    await this.reconcileFinishedRuns();
     // Fail closed: this runner is authenticated against LEVEIA only. Never bill
     // LEVEIA Actions minutes for checks requested by another project.
     if (project.mode !== 'development' || !project.repository || t.project !== project.id) throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
