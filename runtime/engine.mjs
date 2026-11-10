@@ -29,6 +29,10 @@ export class Engine {
     // named implementation target clearly disagree. Mentions elsewhere remain allowed.
     const codingFocus=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
     if(codingFocus&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(codingFocus)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(codingFocus)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Also reject a task titled for a different product, such as
+    // "# AS DEVELOPER | FINALIZAR ...", before any provider budget is spent.
+    const title=instructions.match(/^\\s*#{1,4}\\s*([^\\n]{1,160})/m)?.[1]||'';
+    if(title&&/\\b(?:finalizar|implementar|corregir|desarrollar|modificar|construir)\\b/i.test(title)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(title)))throw Error('PROJECT_SELECTION_MISMATCH');
     let previous=null;
     if(previousTaskId!==undefined&&previousTaskId!==null){
       if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
