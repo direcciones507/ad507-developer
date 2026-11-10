@@ -41,6 +41,20 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
   if(project?.repository){const a=node('a','Abrir repositorio en GitHub');a.href='https://github.com/'+project.repository;a.target='_blank';a.rel='noopener noreferrer';overview.append(a);}
   if(completed)overview.append(node('p','Puedes revisar el resumen y solicitar una corrección con un nuevo trabajo. Aprobar entrega prepara la siguiente etapa de revisión; no significa publicar directamente en producción.'));
   if(t.state==='failed')overview.append(node('p','Motivo del fallo: '+(t.reason||'No especificado')+'.'));
+  const deliveryActions=$('delivery-actions');deliveryActions.replaceChildren();
+  if(['awaiting_approval','completed','failed'].includes(t.state)){
+    const correction=node('button','Solicitar corrección');correction.type='button';correction.className='secondary';
+    correction.addEventListener('click',()=>{
+      const target=status?.projects?.find(p=>p.id===t.project);
+      if(!target)return showError(new Error('PROYECTO_NO_DISPONIBLE'));
+      $('project').value=t.project;projectInfo();
+      const details=t.files?.length?'Archivos implicados: '+t.files.join(', ')+'. ':'';
+      $('instructions').value='CORRECCIÓN DE ENTREGA ANTERIOR ('+t.id.slice(0,8)+'). '+details+'Revisa el resultado de la tarea anterior y corrige el problema siguiente: ';
+      $('instructions').focus();$('instructions').scrollIntoView({behavior:'smooth',block:'center'});
+      $('message').hidden=false;$('message').textContent='Describe la corrección y pulsa Crear e iniciar trabajo. No se enviará nada hasta que tú lo confirmes.';
+    });
+    deliveryActions.append(correction);
+  }
   $('summary').textContent=t.summary||'El agente no proporcionó un resumen en lenguaje natural. No se puede determinar la corrección exacta únicamente por los nombres de archivos.';$('pr').replaceChildren();if(t.delivery?.url?.startsWith('https://github.com/')){const a=node('a','Abrir PR para revisión');a.href=t.delivery.url;a.target='_blank';a.rel='noopener noreferrer';$('pr').append(a);}
   $('checks').replaceChildren();if(!t.checks.length)$('checks').append(node('p','Sin pruebas de código ejecutadas en esta tarea.'));for(const check of t.checks){const d=node('details','');d.append(node('summary',`${check.check}: ${check.passed?'APROBADA':'FALLIDA'} · ${check.at||''}`),node('pre',check.output||'Sin salida'));$('checks').append(d);}
   $('remote-checks').replaceChildren();for(const check of t.remoteChecks||[]){const row=node('p',`${check.check}: ${check.state} · ${check.minutesReserved} min reservados `);if(check.runUrl?.startsWith('https://github.com/direcciones507/ad507-developer/actions/runs/')){const link=node('a','Ver ejecución');link.href=check.runUrl;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}$('remote-checks').append(row);}
