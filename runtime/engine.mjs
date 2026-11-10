@@ -15,6 +15,18 @@ export class Engine {
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
     if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
+    // A task may mention another product as context, but it must not request
+    // implementation in a different repository from the selected project.
+    const targetPatterns=[
+      {id:'as-developer',match:/\b(?:AS Developer|AD507 Developer)\b/i},
+      {id:'mi-contacto',match:/\bMi Contacto\b/i},
+      {id:'empleos-pa',match:/\b(?:Empleos\.pa|Empleospa)\b/i},
+      {id:'direcciones507',match:/\b(?:Direcciones507|Direcciones LATAM|direcciones\.lat)\b/i}
+    ];
+    const targetHeader=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:PROYECTO\s*(?:OBJETIVO|A MODIFICAR|DE DESTINO)?|REPOSITORIO\s*(?:OBJETIVO|DE DESTINO)?)\s*[:：]\s*([^\n]{1,120})/i)?.[1]||'';
+    if(targetHeader&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeader)))throw Error('PROJECT_SELECTION_MISMATCH');
+    const implementationTarget=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
+    if(implementationTarget&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(implementationTarget)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(implementationTarget)))throw Error('PROJECT_SELECTION_MISMATCH');
     let previous=null;
     if(previousTaskId!==undefined&&previousTaskId!==null){
       if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
