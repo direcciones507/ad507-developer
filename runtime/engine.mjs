@@ -170,7 +170,12 @@ export class Engine {
       }
     }catch(e){
       const current=this.s.get(t.id);
-      if(['paused','cancelled','awaiting_approval'].includes(current.state)){
+      if(current.state==='pending'&&controller.signal.aborted){
+        // Shutdown already checkpointed this task for restart. Do not turn
+        // its expected AbortError into a terminal TASK_TIMEOUT failure.
+        t.state='pending';t.gate=current.gate;t.reason=current.reason;
+        this.s.save(t);this.s.event(t.id,'worker_stopped',{state:'pending',inflight:t.inflight??null});
+      }else if(['paused','cancelled','awaiting_approval'].includes(current.state)){
         // Finish an in-flight atomic step, retaining requested control state and its recovery marker.
         t.state=current.state;t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'worker_stopped',{state:t.state,inflight:t.inflight??null});
       }else if(['STEP_LIMIT','BUDGET_EXHAUSTED'].includes(e.message) && t.phase==='model'){
