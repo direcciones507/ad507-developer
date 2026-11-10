@@ -25,7 +25,7 @@ try{
  assert.match((await docker(['exec',name,'stat','-c','%u:%g %a','/data/ad507'])).trim(),/^1000:1000 700$/);
  await docker(['restart',name]);await healthy();
  const restored=await fetch(origin+`/api/tasks/${task.id}`,{headers:{Cookie:cookie}}).then(r=>r.json());assert.equal(restored.state,'awaiting_approval');assert.equal(restored.branch,before.branch);
- const file=await fetch(origin+`/api/tasks/${task.id}/file?path=docs%2Fad507-simulation.md`,{headers:{Cookie:cookie}}).then(r=>r.json());assert.match(file.content,/AD507 Developer/);
+ const file=await fetch(origin+`/api/tasks/${task.id}/file?path=docs%2Fad507-simulation.md`,{headers:{Cookie:cookie}}).then(r=>r.json());assert.match(file.content,/^# AS Developer\s*$/m);
  assert.equal((await fetch(origin+'/api/tasks')).status,401);
  const result=await fetch(origin+`/api/tasks/${task.id}/control`,{method:'POST',headers,body:JSON.stringify({action:'approve'})}).then(r=>r.json());assert.equal(result.state,'completed');
  console.log('PASS controller image: root-mounted private volume -> UID1000 -> task -> Docker restart -> SQLite/session/workspace survive -> approval');

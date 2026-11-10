@@ -7,14 +7,14 @@ export function normalizeProject(id,input,env={}){
   if(!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(baseBranch)||baseBranch.includes('..')||baseBranch.includes('//')||baseBranch.endsWith('/'))throw Error('INVALID_BASE_BRANCH');
   if(input.productionWrite===true||input.mergeMain===true)throw Error('PROTECTED_OPERATION');
   const key=id.replaceAll('-','_').toUpperCase();
-  const projectCap=Number(input.projectCap??env[`AD507_${id==='leveia'?'LEVEIA':id==='junta-comunal-santiago'?'JUNTA':key}_BUDGET_MICROUSD`]??1000000),taskCap=Number(input.taskCap??250000);
-  if(!Number.isSafeInteger(projectCap)||projectCap<1||projectCap>10000000||!Number.isSafeInteger(taskCap)||taskCap<1||taskCap>250000||taskCap>projectCap)throw Error('INVALID_PROJECT_BUDGET');
+  const projectCap=Number(input.projectCap??env[`AD507_${id==='leveia'?'LEVEIA':id==='junta-comunal-santiago'?'JUNTA':key}_BUDGET_MICROUSD`]??5000000),taskCap=Number(input.taskCap??2000000);
+  if(!Number.isSafeInteger(projectCap)||projectCap<1||projectCap>50000000||!Number.isSafeInteger(taskCap)||taskCap<1||taskCap>10000000||taskCap>projectCap)throw Error('INVALID_PROJECT_BUDGET');
   return {id,name:input.name,enabled:input.enabled!==false,mode,repository,baseBranch,productionWrite:false,mergeMain:false,projectCap,taskCap,
     checks:mode==='preparation'?[]:repository==='direcciones507/leveia'?['agent-test','agent-typecheck','api-typecheck','api-build']:repository==='direcciones507/ad507-developer'?['standalone-agent-test','project-syntax']:['project-syntax','project-test'],
     tokenEnv:id==='leveia'?'AD507_LEVEIA_GITHUB_TOKEN':`AD507_PROJECT_${key}_GITHUB_TOKEN`,source:id==='leveia'?env.AD507_LEVEIA_SOURCE:undefined};
 }
 export function registeredProject(c,p){const known=c.projects?.[p.id];if(!known?.enabled||known.repository!==p.repository||known.baseBranch!==p.baseBranch)throw Error('PROJECT_NOT_AUTHORIZED');return known;}
-export function projectToken(c,project){const p=registeredProject(c,project);return c.env?.[p.tokenEnv]||(p.id==='mi-contacto'?(c.env?.AD507_PROJECT_DIRECCIONES507_GITHUB_TOKEN||c.env?.AD507_GITHUB_TOKEN):undefined)||(p.id==='leveia'?(c.sourceToken||c.env?.AD507_GITHUB_TOKEN):undefined);}
+export function projectToken(c,project){const p=registeredProject(c,project);return c.env?.[p.tokenEnv]||(p.id==='as-developer'?c.env?.AD507_GITHUB_TOKEN:undefined)||(p.id==='mi-contacto'?(c.env?.AD507_PROJECT_DIRECCIONES507_GITHUB_TOKEN||c.env?.AD507_GITHUB_TOKEN):undefined)||(p.id==='leveia'?(c.sourceToken||c.env?.AD507_GITHUB_TOKEN):undefined)||(p.id==='leveia-agents'?c.sourceToken:undefined);}
 export class ProjectRegistry{
   constructor(c,s){this.c=c;this.s=s;s.db.exec('CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,data TEXT NOT NULL)');
     for(const [id,p] of Object.entries(c.projects))s.db.prepare('INSERT OR IGNORE INTO projects VALUES(?,?)').run(id,JSON.stringify(p));

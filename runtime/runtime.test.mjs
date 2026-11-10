@@ -22,7 +22,7 @@ const task=e=>e.create({project:'junta-comunal-santiago',instructions:'Preparar 
 test('task simulation creates real isolated Git branch and file, then awaits human review',async t=>{
   const {e,s,w}=await fixture(t);const job=task(e);assert.equal(job.state,'pending');await e.tick();const result=s.get(job.id);
   assert.equal(result.state,'awaiting_approval');assert.equal(result.gate,'delivery');assert.match(result.branch,/^ad507\/task-/);
-  assert.deepEqual(result.files,['docs/ad507-simulation.md']);assert.match(await w.read(result,'docs/ad507-simulation.md'),/AD507 Developer/);
+  assert.deepEqual(result.files,['docs/ad507-simulation.md']);assert.match(await w.read(result,'docs/ad507-simulation.md'),/AS Developer/);
   assert.equal(await git(w.root(result),['branch','--show-current']),result.branch);
   assert.equal((await git(w.root(result),['show','main:docs/ad507-simulation.md']).catch(()=>'')),'');
   assert.equal(e.control(result.id,'approve').state,'completed');assert.equal(s.events(job.id).some(v=>v.kind==='owner_approve'),true);
@@ -53,6 +53,8 @@ test('cancel in-flight request is durable and never auto-resumes',async t=>{
 });
 test('task and lifetime project caps are reserved transactionally before calls',async t=>{
   const {e,s,c}=await fixture(t);c.projects['junta-comunal-santiago'].projectCap=3;
+  // A provider without reported usage must retain the full reservation.
+  const simulatedNext=e.provider.next.bind(e.provider);e.provider.next=async (...args)=>{const response=await simulatedNext(...args);delete response.usage;return response;};
   const first=e.create({project:'junta-comunal-santiago',instructions:'Prepare docs',budget:2});await e.tick();assert.equal(s.get(first.id).reason,'BUDGET_EXHAUSTED');assert.equal(s.get(first.id).reserved,2);
   const second=e.create({project:'junta-comunal-santiago',instructions:'Prepare docs',budget:3});await e.tick();assert.equal(s.get(second.id).reserved,1);assert.equal(s.projectUsage(second.project),3);
 });

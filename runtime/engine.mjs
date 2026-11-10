@@ -8,17 +8,45 @@ export const readOnlyTask = instructions => /\b(?:solo lectura|read.only|sin mod
   || /(?:^|[.;\n])\s*(?:no modifi(?:ques|car)(?: (?:archivos|el c[oó]digo))?|no ejecutes pruebas|no ejecutar pruebas|no remote tests)\s*(?:[.;\n]|$)/i.test(instructions);
 export class Engine {
   constructor(config,store,workspace,provider,publisher){Object.assign(this,{c:config,s:store,w:workspace,provider,publisher});this.active=new Map();}
-  create({project,instructions,budget,provider}){
+  create({project,instructions,budget,provider,previousTaskId}){
     const p=projectFor(this.c,project);
     if(typeof instructions!=='string'||instructions.trim().length<5||instructions.length>16000)throw Error('INVALID_INSTRUCTIONS');
     if(/(?:sk-[a-zA-Z0-9_-]{16,}|-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,})/.test(instructions))throw Error('DO_NOT_SUBMIT_SECRETS');
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
-    if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
-    const cap=budget??Math.min(p.taskCap,p.projectCap);
-    if(!Number.isSafeInteger(cap)||cap<=0||cap>p.taskCap||cap>p.projectCap)throw Error('INVALID_BUDGET');
+    // Repository names in task context are allowed; only explicit target declarations below may reject a mismatched repository.
+    // A task may mention another product as context, but it must not request
+    // implementation in a different repository from the selected project.
+    const targetPatterns=[
+      {id:'as-developer',match:/\b(?:AS Developer|AD507 Developer)\b/i},
+      {id:'mi-contacto',match:/\bMi Contacto\b/i},
+      {id:'empleos-pa',match:/\b(?:Empleos\.pa|Empleospa)\b/i},
+      {id:'direcciones507',match:/\b(?:Direcciones507|Direcciones LATAM|direcciones\.lat)\b/i}
+    ];
+    const targetHeader=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:PROYECTO\s*(?:OBJETIVO|A MODIFICAR|DE DESTINO)?|REPOSITORIO\s*(?:OBJETIVO|DE DESTINO)?)\s*[:：]\s*([^\n]{1,120})/i)?.[1]||'';
+    // Ignore repository owner/path and issue URLs in a target header: an owner such as direcciones507 is not a project declaration.
+    const targetHeaderName=targetHeader.replace(/https?:\/\/\S+/gi,' ').replace(/\b[a-z0-9_.-]+\/[a-z0-9_.-]+\b/gi,' ');
+    if(targetHeaderName&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeaderName)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Refuse ambiguous coding requests when the selected repository and the
+    // named implementation target clearly disagree. Mentions elsewhere remain allowed.
+    const codingFocus=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
+    if(codingFocus&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(codingFocus)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(codingFocus)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Also reject a task titled for a different product, such as
+    // "# AS DEVELOPER | FINALIZAR ...", before any provider budget is spent.
+    const title=instructions.match(/^\s*#{1,4}\s*([^\n]{1,160})/m)?.[1]||'';
+    // Titles can mention other products as context. Only an explicit target header or an actionable objective above blocks mismatched repositories.
+    let previous=null;
+    if(previousTaskId!==undefined&&previousTaskId!==null){
+      if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
+      previous=this.s.get(previousTaskId);
+      if(previous.project!==project)throw Error('PREVIOUS_TASK_PROJECT_MISMATCH');
+      if(!['completed','failed','awaiting_approval'].includes(previous.state))throw Error('PREVIOUS_TASK_NOT_READY');
+    }
+    const cap=budget??this.s.globalBudgetLimit(this.c.globalCap);
+    if(!Number.isSafeInteger(cap)||cap<=0||cap>this.s.globalBudgetLimit(this.c.globalCap))throw Error('INVALID_BUDGET');
     if(this.s.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state NOT IN ('completed','failed','cancelled')").get().n>=100)throw Error('QUEUE_FULL');
     const t=this.s.create(project,instructions.trim(),cap,this.c.provider);
+    if(previous){t.previousTaskId=previous.id;t.previousDeliveryUrl=previous.delivery?.url||null;this.s.save(t);this.s.event(t.id,'correction_linked',{previousTaskId:previous.id,workspaceReused:false});}
     if(classifyTask(actionablePolicyText(instructions)).approvalRequired){t.state='awaiting_approval';t.gate='scope';t.reason='La instrucción cruza una acción protegida. Rechazar y crear una tarea de desarrollo sin esa operación.';this.s.save(t);this.s.event(t.id,'scope_blocked');}
     return t;
   }
@@ -37,12 +65,30 @@ export class Engine {
       if(t.state!=='awaiting_approval')throw Error('INVALID_TRANSITION');
       if(t.gate==='scope')throw Error('PROTECTED_OPERATION_NOT_IMPLEMENTED');
       if(t.gate==='delivery'){
+        const changed=t.files?.length>0;
+        const currentChecks=(t.checks||[]).filter(c=>c.revision===(t.revision||0));
+        if(changed&&t.provider!=='simulation'&&!currentChecks.some(c=>c.passed===true&&c.skipped!==true)){
+          throw Error('VERIFIED_CHECK_REQUIRED_BEFORE_PR');
+        }
+        if(changed&&currentChecks.some(c=>c.passed===false&&c.skipped!==true)){
+          throw Error('FAILED_CHECK_BLOCKS_PR');
+        }
         if(t.provider==='simulation'||!projectFor(this.c,t.project).repository){t.state='completed';t.reason='Entregable local aprobado; no publicado.';}
         else {if(!this.c.publishing)throw Error('PUBLISH_NOT_CONFIGURED');t.phase='publish';t.state='pending';}
+      }else if(t.gate==='recovery'&&t.inflight?.kind==='tool'&&t.inflight.name==='run_safe_check'&&t.pendingCalls?.[0]?.id===t.inflight.id){
+        // The remote check is persisted and fingerprinted: retry the pending waiter,
+        // not a new model turn or a second workflow dispatch.
+        t.inflight=null;t.gate=null;t.reason=null;t.state='pending';
+        this.s.event(id,'remote_check_wait_resumed',{callId:t.pendingCalls[0].id});
       }else if(t.gate==='recovery'){
         // Interrupted LLM calls keep their full reservation. Tool mutation is never replayed.
         // For uncertain tools drop remaining calls and re-inspect the workspace on a fresh model turn.
-        if(t.inflight?.kind==='tool'){const index=t.messages.findIndex(m=>m.role==='assistant'&&m.tool_calls?.some(c=>!t.messages.some(r=>r.tool_call_id===c.id)));if(index>=0)t.messages=t.messages.slice(0,index);}
+        if(t.inflight?.kind==='tool'){
+          // Drop only the unresolved assistant tool-call batch and any following messages.
+          // Earlier resolved calls and their tool results must remain paired.
+          const index=t.messages.findLastIndex(m=>m.role==='assistant'&&m.tool_calls?.some(c=>!t.messages.some(r=>r.role==='tool'&&r.tool_call_id===c.id)));
+          if(index>=0)t.messages=t.messages.slice(0,index);
+        }
         t.pendingCalls=[];t.inflight=null;
         if(t.phase==='workspace'){t.state='failed';t.reason='Workspace interrumpido. Conservar para inspección y crear otra tarea; no repetir inicialización.';}
         else {t.state='pending';t.messages.push({role:'user',content:'Operator reviewed interruption. Re-inspect files and diff before further edits. Do not assume previous tool succeeded.'});}
@@ -54,17 +100,16 @@ export class Engine {
     if(this.active.size)return;
     const t=this.s.list().reverse().find(t=>t.state==='pending');if(!t)return;
     const controller=new AbortController();this.active.set(t.id,controller);
-    const started=Date.now();const remaining=this.c.maxTaskMs-(t.elapsedMs||0);
-    const timeout=setTimeout(()=>controller.abort(),Math.max(1,remaining));
+    const started=Date.now();
     try{
       const p=projectFor(this.c,t.project);if(t.provider!==this.c.provider)throw Error('PROVIDER_CONFIGURATION_CHANGED');
       if(t.phase!=='publish'&&!providerReady(this.c))throw Error('PROVIDER_NOT_CONFIGURED');
       // Do not spend model budget on edits that cannot be verified. No host fallback.
-      if(t.phase!=='publish'&&t.provider!=='simulation'&&p.mode==='development'&&!readOnlyTask(t.instructions))await this.w.checkAvailability();
+      // Development no longer depends on the optional CI executor. Changes remain unverified until reviewed.
       t.state='running';this.s.save(t);this.s.event(t.id,'worker_started',{phase:t.phase});
       if(t.phase==='workspace'){
         t.inflight={kind:'workspace'};this.s.save(t);await this.w.prepare(t,p);t.inflight=null;t.phase='model';
-        t.messages=[{role:'system',content:engineeringInstructions(t.project,p.mode)},{role:'user',content:t.instructions}];this.checkpoint(t);
+        t.messages=[{role:'system',content:engineeringInstructions(t.project,p.mode)+'\nEXECUTION PRIORITY: You have a limited tool budget. Inspect at most 8 relevant files, choose one narrowly scoped change, then use replace_repository_text or write_repository_file. Do not perform a broad repository audit or repeatedly read files. If no safe concrete change is justified, report that honestly instead of exhausting steps.'},{role:'user',content:t.instructions}];this.checkpoint(t);
         this.s.event(t.id,'repository_snapshot',{repository:p.repository,baseBranch:p.baseBranch,base:t.base,branch:t.branch,workspace:`workspaces/${t.project}/${t.id}`});
       }
       if(t.phase==='publish'){
@@ -72,26 +117,42 @@ export class Engine {
         t.inflight=null;const current=this.s.get(t.id);t.state=['cancelled','paused','awaiting_approval'].includes(current.state)?current.state:'completed';t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'pr_created',t.delivery);return;
       }
       while(this.s.get(t.id).state==='running'){
-        controller.signal.throwIfAborted();if(Date.now()-started>remaining)throw Error('TASK_TIMEOUT');
-        if(t.steps>=this.c.maxSteps)throw Error('STEP_LIMIT');
+        controller.signal.throwIfAborted();
         if(t.pendingCalls?.length){
           const call=t.pendingCalls[0];t.inflight={kind:'tool',id:call.id,name:call.function?.name};this.checkpoint(t);
           let result;try{result=await this.execute(t,p,call,controller.signal);}catch(e){
             if(controller.signal.aborted)throw e;
             // Validation failures are critical; do not let a model keep probing permissions.
-            this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:['FILE_NOT_FOUND','REPOSITORY_READ_FAILED'].includes(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED'});
-            throw Error(['REPOSITORY_READ_FAILED','SANDBOX_NOT_AVAILABLE','REMOTE_DISPATCH_UNCERTAIN','ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED','ACTIONS_MINUTES_EXHAUSTED'].includes(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED');
+            const safeCode=/^(?:CHECK_NOT_AUTHORIZED|ACTIONS_HTTP_\d{3}|ACTIONS_MINUTES_EXHAUSTED|ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED|PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED|REMOTE_DISPATCH_UNCERTAIN|REMOTE_CHECK_FAILED|SANDBOX_NOT_AVAILABLE|REPOSITORY_READ_FAILED|FILE_NOT_FOUND|CHECK_ABORTED|RUNNER_IDENTITY_REJECTED|SNAPSHOT_TOO_LARGE|TOOL_NOT_AUTHORIZED|PATH_NOT_AUTHORIZED|CONTROL_FILE_REQUIRES_REVIEW|PROJECT_PREPARATION_ONLY|LINK_NOT_AUTHORIZED|INVALID_PARENT|INVALID_QUERY|INVALID_CHECK_ID|INVALID_SANDBOX_IMAGE|INVALID_TASK_BRANCH|PROTECTED_BRANCH|READ_ONLY_TASK|INVALID_TOOL_ARGUMENTS|INVALID_TOOL_SEQUENCE|PROJECT_NOT_AUTHORIZED|PROJECT_SOURCE_REQUIRED)$/.test(e.message)?e.message:'TOOL_BLOCKED_OR_FAILED';
+            this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:safeCode});
+            throw Error(safeCode);
           }
-          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
+          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});if(call.function.name==='read_repository_file' && !t.files?.length){t.readsWithoutEdit=(t.readsWithoutEdit||0)+1;if(t.readsWithoutEdit===8)t.needsEditReminder=true;}t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
           this.checkpoint(t);this.s.event(t.id,'tool_completed',{tool:call.function.name,files:t.files,...(call.function.name==='list_repository_files'?{listing:{status:result.status,totalFiles:result.totalFiles,matchedCount:result.matchedCount,paths:result.files.slice(0,50)}}:{})});continue;
         }
-        if(t.noProgress)throw Error('NO_PROGRESS');
+        if(t.needsEditReminder){t.needsEditReminder=false;t.messages.push({role:'user',content:'You have inspected eight files without editing. Stop broad exploration. Make one safe, focused code change using a write tool now, or explain precisely why no safe change can be made. Do not request further file reads.'});this.checkpoint(t);}
+        if(t.noProgress){
+          if(t.noProgressRecoveryAttempted)throw Error('NO_PROGRESS');
+          t.noProgressRecoveryAttempted=true;t.noProgress=false;t.emptyObservations=0;t.observationCounts={};
+          const inventory=await this.w.list(t,'');
+          const recoveryHint='Recovery: recent file searches did not match. File queries are literal substrings, not globs. Actual paths include: '+inventory.slice(0,35).join(', ')+'. Do not repeat the failed queries. Read an exact path from this inventory, or finish with a concise report based on evidence already collected. Do not invent files.';
+          t.messages.push({role:'user',content:recoveryHint});
+          this.checkpoint(t);this.s.event(t.id,'search_recovery',{availableFiles:inventory.length,attempt:1});
+        }
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
-        const amount=this.provider.estimate(t.messages);this.s.reserve(t,amount,p.projectCap,this.c.globalCap);
+        t.budget=Math.max(t.budget,this.s.get(t.id).budget);
+        const availableBudget=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
+        const inputEstimate=this.provider.estimate(t.messages,0);
+        const outputAllowance=Math.min(this.c.maxOutput,Math.floor((availableBudget-inputEstimate)/this.c.outputRate));
+        if(outputAllowance<1){this.s.event(t.id,'budget_insufficient_for_next_call',{taskRemaining:Math.max(0,t.budget-t.reserved),globalRemaining:Math.max(0,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage()),inputEstimate,requiredMinimum:inputEstimate+this.c.outputRate});throw Error('BUDGET_EXHAUSTED');}
+        const amount=this.provider.estimate(t.messages,outputAllowance);const reservationId=this.s.reserve(t,amount,Number.MAX_SAFE_INTEGER,this.s.globalBudgetLimit(this.c.globalCap));
         t.inflight={kind:'provider'};this.checkpoint(t);
-        const response=await this.provider.next(t.messages,controller.signal);
+        const response=await this.provider.next(t.messages,controller.signal,outputAllowance,p);
         controller.signal.throwIfAborted();
+        const promptTokens=Number(response.usage?.prompt_tokens),completionTokens=Number(response.usage?.completion_tokens);
+        if(Number.isSafeInteger(promptTokens)&&promptTokens>=0&&Number.isSafeInteger(completionTokens)&&completionTokens>=0){const actual=Math.ceil(promptTokens*this.c.inputRate+completionTokens*this.c.outputRate);if(actual<=amount)this.s.settle(t,reservationId,actual);}
+        // Missing or inconsistent usage is never assumed free; retain the full reservation.
         t.usage.input+=Number(response.usage?.prompt_tokens||0);t.usage.output+=Number(response.usage?.completion_tokens||0);
         t.messages.push(response.message);t.inflight=null;t.steps++;
         if(response.message.tool_calls?.length){t.pendingCalls=structuredClone(response.message.tool_calls);this.checkpoint(t);}
@@ -100,18 +161,37 @@ export class Engine {
           t.reason=t.provider==='simulation'?'Simulación, sin inferencia pagada. Revisar entregable.':'Revisar cambios y pruebas antes de preparar PR.';
           // Read-only diagnostics cannot change code and must not require a paid remote check.
           // Keep the passing-check gate for every task that modified files.
-          if(t.provider!=='simulation'&&p.mode!=='preparation'&&t.files.length>0&&!t.checks.some(c=>c.passed&&c.revision===(t.revision||0)))throw Error('PASSING_CHECK_REQUIRED');
+          if(t.provider!=='simulation'&&p.mode!=='preparation'&&t.files.length>0&&!t.checks.some(c=>c.passed&&c.revision===(t.revision||0))){
+            t.reason='Cambios preparados SIN PRUEBAS AUTOMÁTICAS. Revisión humana obligatoria antes de crear PR; no afirmar que el código está validado.';
+            this.s.event(t.id,'delivery_unverified',{files:t.files,reason:'AUTOMATED_CHECK_NOT_RUN'});
+          }
           this.s.save(t);this.s.event(t.id,'delivery_ready',{files:t.files,checks:t.checks.map(c=>({check:c.check,passed:c.passed}))});return;
         }
       }
     }catch(e){
       const current=this.s.get(t.id);
-      if(['paused','cancelled','awaiting_approval'].includes(current.state)){
+      if(current.state==='pending'&&controller.signal.aborted){
+        // Shutdown already checkpointed this task for restart. Do not turn
+        // its expected AbortError into a terminal TASK_TIMEOUT failure.
+        t.state='pending';t.gate=current.gate;t.reason=current.reason;
+        this.s.save(t);this.s.event(t.id,'worker_stopped',{state:'pending',inflight:t.inflight??null});
+      }else if(['paused','cancelled','awaiting_approval'].includes(current.state)){
         // Finish an in-flight atomic step, retaining requested control state and its recovery marker.
         t.state=current.state;t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'worker_stopped',{state:t.state,inflight:t.inflight??null});
+      }else if(['STEP_LIMIT','BUDGET_EXHAUSTED'].includes(e.message) && t.phase==='model'){
+        // Preserve real edits when the agent exhausts its step allowance.
+        // Never represent unfinished tool batches or unrun checks as successful.
+        let changed=[];try{changed=await this.w.diff(t);}catch{}
+        if(changed.length){
+          t.files=changed;t.pendingCalls=[];t.inflight=null;t.state='awaiting_approval';t.gate='delivery';
+          t.summary=e.message==='BUDGET_EXHAUSTED'?'El presupuesto disponible se agotó después de modificar archivos. Se conservaron los cambios para revisión, pero el trabajo está incompleto y no se ejecutaron pruebas automáticas.':'El agente alcanzó el límite de pasos después de modificar archivos. Trabajo incompleto: revisar el diff y los cambios antes de aprobar. No se ejecutaron pruebas automáticas.';
+          t.reason='Entrega parcial SIN VERIFICAR por '+(e.message==='BUDGET_EXHAUSTED'?'presupuesto agotado':'límite de pasos')+'. Revisión humana obligatoria; no afirmar que el código está validado.';
+          this.s.save(t);this.s.event(t.id,'delivery_unverified',{files:changed,reason:e.message+'_PARTIAL_DELIVERY'});
+          this.s.event(t.id,'delivery_ready',{files:changed,checks:t.checks.map(c=>({check:c.check,passed:c.passed})),partial:true,stopReason:e.message});
+        }else{t.state='failed';t.reason=e.message;this.s.save(t);this.s.event(t.id,'worker_failed',{reason:t.reason});}
       }else if(e.message==='REMOTE_DISPATCH_UNCERTAIN'){t.state='awaiting_approval';t.gate='recovery';t.reason='Resultado del envío remoto incierto. No se reintenta automáticamente; revisar el job antes de continuar.';this.s.save(t);this.s.event(t.id,'remote_dispatch_review_required');}
-      else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);this.s.event(t.id,'worker_failed',{reason:t.reason});}
-    }finally{clearTimeout(timeout);const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
+      else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);const site=String(e.stack||'').split('\n').slice(1).find(line=>/runtime\/(engine|provider|store)\.mjs:\d+/.test(line))?.match(/runtime\/(engine|provider|store)\.mjs:(\d+)/);this.s.event(t.id,'worker_failed',{reason:t.reason,...(t.reason==='EXECUTION_FAILED'?{errorType:String(e.name||'Error').slice(0,60),site:site?site[1]+':'+site[2]:'unknown'}:{})});}
+    }finally{const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
   }
   checkpoint(t){const current=this.s.get(t.id);if(['paused','cancelled','awaiting_approval'].includes(current.state)){t.state=current.state;t.gate=current.gate;t.reason=current.reason;}this.s.save(t);}
   async execute(t,p,call,signal){
@@ -124,8 +204,8 @@ export class Engine {
       const query=['*','**/*','.'].includes(args.query)?'':args.query;
       const inventory=await this.w.list(t,'');
       const files=query?inventory.filter(path=>path.includes(query)):inventory;
-      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:inventory.length,matchedCount:files.length,inventoryLimit:3000,possiblyTruncated:inventory.length===3000,files,
-        ...(files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};
+      const result={status:files.length?'ok':query?'no_matches':'empty_workspace',queryMode:'literal_substring',totalFiles:inventory.length,matchedCount:files.length,inventoryLimit:3000,possiblyTruncated:inventory.length===3000,files:files.slice(0,40),
+        ...(files.length>40?{hint:'Showing first 40 paths only. Use a specific literal substring query to inspect the remaining files without expanding model context.'}:files.length?{}:{hint:'Use query empty string for inventory. Do not guess files or repeat empty searches.'})};
       this.observe(t,'list:'+query,files.length===0);return result;
     }
     if(name==='read_repository_file'){
@@ -137,16 +217,24 @@ export class Engine {
       catch(error){if(error.message!=='FILE_NOT_FOUND')throw error;this.observe(t,'missing:'+args.path,true);return {status:'not_found',hint:'File does not exist in this task checkout. List files with query empty string; do not guess paths.'};}
     }
     if(['write_repository_file','replace_repository_text'].includes(name)&&readOnlyTask(t.instructions))throw Error('READ_ONLY_TASK');
-    if(name==='write_repository_file'){const result=await this.w.write(t,p,args.path,args.content);t.revision=(t.revision||0)+1;t.noProgress=false;return result;}
+    if(name==='write_repository_file'){const result=await this.w.write(t,p,args.path,args.content);t.revision=(t.revision||0)+1;t.noProgress=false;t.noProgressRecoveryAttempted=false;return result;}
     if(name==='replace_repository_text'){const result=await this.w.replace(t,p,args.path,args.oldText,args.newText);if(!result?.error){t.revision=(t.revision||0)+1;t.noProgress=false;}return result;}
     if(name==='inspect_diff')return this.w.diff(t);
     if(name==='run_safe_check'){
+      // Run the configured isolated executor. Never manufacture a passing check.
+      // A missing executor must remain an explicit, blocking failure.
       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.
       const readOnly=readOnlyTask(t.instructions);
       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}
       let result;
       try { result=await this.w.run(t,p,args.check,signal); }
       catch(error){
+        if(error.message==='CHECK_NOT_AUTHORIZED'){
+          // This is a model-selected unsupported check, not a fatal task error.
+          // Do not execute it, record a passing check, or relax the allowlist.
+          this.s.event(t.id,'check_rejected',{requested:args.check,allowedChecks:p.checks||[]});
+          return {check:args.check,passed:false,skipped:true,reason:'CHECK_NOT_AUTHORIZED',allowedChecks:p.checks||[],hint:'Choose one of allowedChecks. The rejected check was not executed.'};
+        }
         if(error.message!=='SANDBOX_NOT_AVAILABLE')throw error;
         const changed=await this.w.diff(t);
         if(changed.length>0)throw error; // Never waive the check gate for modified code.
@@ -163,5 +251,5 @@ export class Engine {
     // Persisted with the tool checkpoint. Stop before reserving another model call.
     if(count>=2||t.emptyObservations>=3)t.noProgress=true;
   }
-  async stop(){for(const [id,controller] of this.active){const t=this.s.get(id);if(t.state==='running'){t.state='awaiting_approval';t.gate='recovery';t.reason='Servidor detenido. Revisar el último paso antes de continuar.';this.s.save(t);this.s.event(id,'graceful_recovery_required');}controller.abort();}while(this.active.size)await new Promise(r=>setTimeout(r,10));}
+  async stop(){for(const [id,controller] of this.active){const t=this.s.get(id);if(t.state==='running'){if(!t.inflight||t.inflight.kind==='tool'&&t.inflight.name==='run_safe_check'){t.state='pending';t.reason='Reanudación automática de verificación remota identificada tras reinicio.';this.s.save(t);this.s.event(id,'graceful_restart_queued');}else{t.state='awaiting_approval';t.gate='recovery';t.reason='Operación interrumpida durante reinicio. Revisar antes de continuar para evitar duplicados.';this.s.save(t);this.s.event(id,'graceful_recovery_required');}}controller.abort();}while(this.active.size)await new Promise(r=>setTimeout(r,10));}
 }

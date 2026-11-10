@@ -19,12 +19,12 @@ async function fixture(t){
 }
 const call=(name,args)=>({function:{name,arguments:JSON.stringify(args)}});
 
-test('standalone config keeps all seeds and recovered Mi Contacto ref; Actions cannot be selected',()=>{
+test('standalone config keeps all seeds and recovered Mi Contacto ref; Actions require explicit setup',()=>{
  const c=loadConfig({});assert.equal(c.live,false);assert.equal(c.checkBackend,'local-docker');
  assert.equal(c.projects['mi-contacto'].repository,'direcciones507/mi-contacto');
  assert.equal(c.projects['mi-contacto'].baseBranch,'recovery/mi-contacto-existing-20261101');
  for(const id of ['leveia','direcciones507','empleos-pa','reportapa','junta-comunal-santiago'])assert.ok(c.projects[id]);
- assert.throws(()=>loadConfig({AD507_CHECK_BACKEND:'github-actions'}),/GITHUB_ACTIONS_DISABLED/);
+ assert.equal(loadConfig({AD507_CHECK_BACKEND:'github-actions'}).checkBackend,'github-actions');
 });
 test('selection mismatch is rejected before a task or reservation exists',async t=>{
  const {e,s}=await fixture(t);
@@ -36,7 +36,7 @@ test('repeated read returns a reference without copying content and persists sto
  await e.tick();const j=s.get(task.id),p=c.projects[j.project];
  const tool=call('read_repository_file',{path:'docs/ad507-simulation.md'});
  let reads=0;const original=w.read.bind(w);w.read=async(...args)=>{reads++;return original(...args);};
- const first=await e.execute(j,p,tool,AbortSignal.timeout(1000));assert.match(first,/AD507 Developer/);s.save(j);
+ const first=await e.execute(j,p,tool,AbortSignal.timeout(1000));assert.match(first,/AS Developer/);s.save(j);
  const restored=s.get(j.id);const second=await e.execute(restored,p,tool,AbortSignal.timeout(1000));
  assert.equal(second.status,'already_read');assert.equal(reads,1);assert.equal(restored.noProgress,true);
  await e.execute(restored,p,call('write_repository_file',{path:'docs/ad507-simulation.md',content:'New revision'}),AbortSignal.timeout(1000));

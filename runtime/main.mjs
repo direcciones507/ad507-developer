@@ -2,11 +2,13 @@ import { loadConfig } from './config.mjs';
 import { ProjectRegistry } from './projects.mjs';
 import { Store } from './store.mjs';
 import { Workspace } from './workspace.mjs';
+import { ActionsChecks } from './actions-checks.mjs';
 import { Provider,SimulationProvider } from './provider.mjs';
 import { Publisher } from './publisher.mjs';
 import { Engine } from './engine.mjs';
 import { createApp } from './server.mjs';
 const c=loadConfig();const s=new Store(c.root);c.registry=new ProjectRegistry(c,s);const w=new Workspace(c);
+if(c.checkBackend==='github-actions')w.remote=new ActionsChecks(c,s,w);
 const e=new Engine(c,s,w,c.provider==='simulation'?new SimulationProvider():new Provider(c),new Publisher(c,w));
 let app;try{app=createApp(c,s,e);}catch(err){s.close();throw err;}
 const timer=setInterval(()=>e.tick().catch(()=>console.error('WORKER_TICK_FAILED')),500);

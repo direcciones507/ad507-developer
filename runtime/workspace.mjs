@@ -44,7 +44,7 @@ export class Workspace {
     }else{
       if(p.mode!=='preparation')throw Error('PROJECT_SOURCE_REQUIRED');
       await mkdir(root,{mode:0o700});await git(root,['init','-b','main']);
-      await git(root,['-c','user.name=AD507 Developer','-c','user.email=ad507-agent@users.noreply.github.com','commit','--allow-empty','-m','Initialize isolated preparation workspace']);
+      await git(root,['-c','user.name=AS Developer','-c','user.email=ad507-agent@users.noreply.github.com','commit','--allow-empty','-m','Initialize isolated preparation workspace']);
     }
     t.base=await git(root,['rev-parse','HEAD']);t.branch=`ad507/task-${t.id}`;
     if(!TASK_BRANCH.test(t.branch))throw Error('INVALID_TASK_BRANCH');
@@ -88,13 +88,14 @@ export class Workspace {
     try{await chmod(snapshot,0o755);let bytes=0;
       for(const path of await this.list(t)){
         const source=await safePath(root,path,false);const size=(await lstat(source)).size;bytes+=size;
-        if(size>4000000||bytes>16000000)throw Error('SANDBOX_SNAPSHOT_LIMIT');
+        if(size>8000000||bytes>32000000)throw Error('SANDBOX_SNAPSHOT_LIMIT');
         const dest=join(snapshot,path);await mkdir(dirname(dest),{recursive:true,mode:0o755});await copyFile(source,dest);await chmod(dest,0o644);
       }return snapshot;
     }catch(error){await rm(snapshot,{recursive:true,force:true});throw error;}
   }
   async checkAvailability(){
-    if(this.c.checkBackend!=='local-docker')throw Error('GITHUB_ACTIONS_DISABLED');
+    if(this.c.checkBackend==='github-actions'){if(!this.remote?.ready())throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');return;}
+    if(this.c.checkBackend!=='local-docker')throw Error('INVALID_CHECK_BACKEND');
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     try{await this.containerExec('docker',['image','inspect',this.c.sandboxImage],{env:{PATH:process.env.PATH},timeout:10000,maxBuffer:16000});}
     catch{throw Error('SANDBOX_NOT_AVAILABLE');}
@@ -103,24 +104,27 @@ export class Workspace {
     registeredProject(this.c,p);if(t.project!==p.id)throw Error('PROJECT_NOT_AUTHORIZED');
     await this.branch(t);
     const command=requireCheck(p,name);
-    if(this.c.checkBackend==='github-actions')throw Error('GITHUB_ACTIONS_DISABLED');
+    if(this.c.checkBackend==='github-actions'){if(!this.remote)throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');return this.remote.run(t,p,name,signal);}
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     const root=this.root(t);const container=`ad507-${t.id}`;
     const snapshot=await this.snapshot(t);
     return this.runSnapshot(snapshot,t.id,name,signal);
   }
   async runSnapshot(snapshot,id,name,signal){
+    let container=null;
+    try {
     if(!/^[a-f0-9-]{36}$/.test(id))throw Error('INVALID_CHECK_ID');
-    const command=requireCheck({mode:'development'},name);const container=`ad507-${id}`;
+    const command=requireCheck({mode:'development'},name);container=`ad507-${id}`;
     if(!/^[a-zA-Z0-9./:@_-]+$/.test(this.c.sandboxImage))throw Error('INVALID_SANDBOX_IMAGE');
     // Run untrusted tests with no host env, network, socket, capabilities or secrets; never fall back to host execution.
     const args=['run','--pull=never','--rm','--name',container,'--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges',
       '--pids-limit=64','--memory=512m','--cpus=1','--user=1000:1000','--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--tmpfs','/work:rw,nosuid,size=256m,uid=1000,gid=1000',
       '--mount',`type=bind,src=${snapshot},dst=/source,readonly`,
       '--workdir','/work','--env','HOME=/tmp',this.c.sandboxImage,'timeout','--signal=KILL','120s','node','/opt/ad507-link-deps.mjs',...command];
-    try {const r=await this.containerExec('docker',args,{env:{PATH:process.env.PATH},signal,timeout:120000,maxBuffer:256000});return {check:name,passed:true,output:sanitizeOutput(r.stdout+'\n'+r.stderr,this.c)};}
-    catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
-    finally{await this.containerExec('docker',['rm','-f',container],{env:{PATH:process.env.PATH},timeout:10000}).catch(()=>{});await rm(snapshot,{recursive:true,force:true});}
+    try {if(signal?.aborted)throw Error('CHECK_ABORTED');const r=await this.containerExec('docker',args,{env:{PATH:process.env.PATH},signal,timeout:120000,maxBuffer:256000});return {check:name,passed:true,output:sanitizeOutput(r.stdout+'\n'+r.stderr,this.c)};}
+    catch(e){if(e.code==='ENOENT')throw Error('SANDBOX_NOT_AVAILABLE');if(signal?.aborted)throw Error('CHECK_ABORTED');return {check:name,passed:false,output:sanitizeOutput(String(e.stdout||'')+'\n'+String(e.stderr||'CHECK_FAILED'),this.c)};}
+    finally{if(container)await this.containerExec('docker',['rm','-f',container],{env:{PATH:process.env.PATH},timeout:10000}).catch(()=>{});}
+    } finally {await rm(snapshot,{recursive:true,force:true});}
   }
 }
 export function sanitizeOutput(value,c){

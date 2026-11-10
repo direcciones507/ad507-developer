@@ -6,23 +6,29 @@ export const tools = [
   ['run_safe_check','Run an allowlisted check in a network-disabled sandbox.',{check:{type:'string',enum:['agent-test','agent-typecheck','api-typecheck','api-build','project-syntax','project-test','standalone-agent-test']}}],
   ['inspect_diff','Inspect changed file names on the task branch.',{}]
 ].map(([name,description,properties])=>({type:'function',function:{name,description,parameters:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}));
+export function toolsForProject(project){
+  const allowed=project?.checks;
+  if(!Array.isArray(allowed))return tools;
+  return tools.map(tool=>tool.function.name!=='run_safe_check'?tool:{...tool,function:{...tool.function,parameters:{...tool.function.parameters,properties:{...tool.function.parameters.properties,check:{...tool.function.parameters.properties.check,enum:[...allowed]}}}}});
+}
 const endpoint='https://api.deepseek.com/chat/completions';
 export class Provider {
   constructor(config,fetchImpl=fetch){this.c=config;this.fetch=fetchImpl;}
-  estimate(messages){
-    // UTF-8 bytes conservatively bound input token count; reserve output maximum BEFORE the request.
+  estimate(messages,maxOutput=this.c.maxOutput){
+    // Reserve a bounded output allowance; never reserve more than the configured per-call output ceiling.
     validateToolSequence(messages);
     const bytes=Buffer.byteLength(JSON.stringify({messages,tools}),'utf8')+4096;
-    const amount=Math.ceil(bytes*this.c.inputRate+this.c.maxOutput*this.c.outputRate);
+    const amount=Math.ceil(bytes*this.c.inputRate+maxOutput*this.c.outputRate);
     if(!Number.isSafeInteger(amount)||amount<=0)throw Error('PRICING_REQUIRED');return amount;
   }
-  async next(messages,signal){
+  async next(messages,signal,maxOutput=this.c.maxOutput,project=null){
+    if(!Number.isSafeInteger(maxOutput)||maxOutput<1||maxOutput>this.c.maxOutput)throw Error('INVALID_OUTPUT_LIMIT');
     if(!this.c.live||!this.c.apiKey||!this.c.model)throw Error('PROVIDER_NOT_CONFIGURED');
     if(this.c.provider!=='deepseek')throw Error('DEEPSEEK_ONLY');
     validateToolSequence(messages);
     const res=await this.fetch(endpoint,{method:'POST',redirect:'error',signal,
       headers:{Authorization:`Bearer ${this.c.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:this.c.model,messages,tools,max_tokens:this.c.maxOutput})});
+      body:JSON.stringify({model:this.c.model,messages,tools:toolsForProject(project),max_tokens:maxOutput})});
     // Never persist provider error bodies: they can include sensitive request details.
     if(!res.ok){
       // Log only a bounded, allowlisted error classification; never log provider messages or request bodies.
@@ -52,7 +58,10 @@ export class Provider {
     const choice=json.choices?.[0];
     if(choice?.finish_reason&&!['stop','tool_calls'].includes(choice.finish_reason))throw Error('PROVIDER_INCOMPLETE_RESPONSE');
     const message=choice?.message;
-    if(!message||(!message.tool_calls&&!message.content))throw Error('INVALID_PROVIDER_RESPONSE');
+    if(!message||message.role!=='assistant'||(!message.tool_calls&&!message.content))throw Error('INVALID_PROVIDER_RESPONSE');
+    if(message.tool_calls!==undefined&&(!Array.isArray(message.tool_calls)||message.tool_calls.length===0))throw Error('INVALID_PROVIDER_RESPONSE');
+    if(choice.finish_reason==='tool_calls'&&!message.tool_calls?.length)throw Error('INVALID_PROVIDER_RESPONSE');
+    if(choice.finish_reason==='stop'&&message.tool_calls?.length)throw Error('INVALID_PROVIDER_RESPONSE');
     if(message.tool_calls?.length>8)throw Error('TOO_MANY_TOOL_CALLS');
     if(message.tool_calls?.length)validateToolSequence([...messages,{role:'assistant',...message}],true);
     return {message:{role:'assistant',content:message.content??null,...(message.tool_calls?{tool_calls:message.tool_calls}:{})},usage:json.usage??{}};
@@ -67,7 +76,7 @@ export class SimulationProvider {
   estimate(){return 1;}
   async next(messages,signal){
     signal?.throwIfAborted(); const n=messages.filter(m=>m.role==='assistant').length;
-    const calls=[['list_repository_files',{query:''}],['write_repository_file',{path:'docs/ad507-simulation.md',content:'# AD507 Developer\nPrueba simulada: archivo creado en rama aislada.\n'}],['inspect_diff',{}]];
+    const calls=[['list_repository_files',{query:''}],['write_repository_file',{path:'docs/ad507-simulation.md',content:'# AS Developer\nPrueba simulada: archivo creado en rama aislada.\n'}],['inspect_diff',{}]];
     return n<calls.length?{message:{role:'assistant',content:null,tool_calls:[{id:`sim-${n}`,type:'function',function:{name:calls[n][0],arguments:JSON.stringify(calls[n][1])}}]},usage:{prompt_tokens:0,completion_tokens:0}}:
       {message:{role:'assistant',content:'Simulación terminada. Archivo preparado para revisión humana. No se ejecutó DeepSeek ni se validó el producto.'},usage:{prompt_tokens:0,completion_tokens:0}};
   }

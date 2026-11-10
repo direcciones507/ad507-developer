@@ -6,7 +6,7 @@ export class Publisher {
   constructor(config,workspace,fetchImpl=fetch){this.c=config;this.w=workspace;this.fetch=fetchImpl;}
   async publish(t,p,checkpoint){
     p=registeredProject(this.c,p);if(t.project!==p.id)throw Error('PROJECT_NOT_AUTHORIZED');
-    const credential=this.c.env?.[p.tokenEnv]||(p.id==='leveia'?this.c.env?.AD507_GITHUB_TOKEN:undefined);
+    const credential=this.c.env?.[p.tokenEnv]||(p.id==='as-developer'||p.id==='leveia'?this.c.env?.AD507_GITHUB_TOKEN:undefined);
     if(!this.c.publishing||!p.repository||!credential)throw Error('PUBLISH_NOT_CONFIGURED');
     await this.w.branch(t);if(!TASK_BRANCH.test(t.branch))throw Error('PROTECTED_BRANCH');
     const token=credential;const baseBranch=p.baseBranch||'main',owner=p.repository.split('/')[0];

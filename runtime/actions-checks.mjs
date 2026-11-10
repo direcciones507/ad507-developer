@@ -7,7 +7,7 @@ import { requireCheck } from './checks-policy.mjs';
 import { sanitizeOutput } from './workspace.mjs';
 import { readLimited } from './provider.mjs';
 const hash = value => createHash('sha256').update(value).digest('hex');
-const repo = 'direcciones507/leveia';
+const repo = 'direcciones507/ad507-developer';
 const finished = new Set(['completed', 'cancelled', 'failed', 'expired']);
 export class ActionsChecks {
   constructor(config, store, workspace, { fetchImpl = fetch, pollMs = 1000 } = {}) {
@@ -19,6 +19,7 @@ export class ActionsChecks {
     store.db.exec(`CREATE TABLE IF NOT EXISTS remote_checks(id TEXT PRIMARY KEY, task TEXT NOT NULL, project TEXT NOT NULL,
       fingerprint TEXT UNIQUE NOT NULL, state TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS actions_budget(scope TEXT PRIMARY KEY, reserved INTEGER NOT NULL);`);
+    this.recoverRejectedReservations();
   }
   get(id) { const row = this.s.db.prepare('SELECT data FROM remote_checks WHERE id=?').get(id); if (!row) throw Error('REMOTE_JOB_NOT_FOUND'); return JSON.parse(row.data); }
   // Keep SQL arity explicit; only this helper writes the durable check record.
@@ -35,21 +36,104 @@ export class ActionsChecks {
     if (job.state === 'cancelled' || job.state === 'expired' || Date.now() > job.expires) throw Error('RUNNER_TICKET_REVOKED');
     return job;
   }
-  ready() { return Boolean(this.c.actionsToken && this.c.actionsIncludedOnly && Number.isSafeInteger(this.c.actionsMonthlyMinutes) && this.c.actionsMonthlyMinutes >= 10 && /^[a-f0-9]{40}$/.test(this.c.actionsSHA || '') && this.c.actionsRef); }
+  ready() { return Boolean(this.c.actionsToken && /^[a-f0-9]{40}$/.test(this.c.actionsSHA || '') && this.c.actionsRef); }
   usage() { const month = new Date().toISOString().slice(0,7); return this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get('month:' + month)?.reserved || 0; }
   reserve(job) {
+    // GitHub owns Actions quota enforcement. These rows are audit accounting,
+    // not additional user-configured spending limits for the coding agent.
+    // Keep conservative reservations for uncertain dispatches and reconciliation.
     const month = new Date().toISOString().slice(0,7);
-    const scopes = [[`month:${month}`, this.c.actionsMonthlyMinutes], [`project:${job.project}:${month}`, this.c.actionsProjectMinutes], [`task:${job.task}`, this.c.actionsTaskMinutes]];
-    for (const [scope, cap] of scopes) {
-      const used = this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get(scope)?.reserved || 0;
-      if (!Number.isSafeInteger(cap) || used + job.minutes > cap) throw Error('ACTIONS_MINUTES_EXHAUSTED');
+    for (const scope of [`month:${month}`,`project:${job.project}:${month}`,`task:${job.task}`])
+      this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
+  }
+  releaseRejected(job, code) {
+    // Only definitive HTTP rejection is refundable. Never release an uncertain
+    // transport failure, which may already have started a remote workflow.
+    if (!/^ACTIONS_HTTP_(?:400|401|403|404|409|422)$/.test(code)) return false;
+    return this.s.tx(() => {
+      const fresh=this.get(job.id);
+      if (fresh.minutesReleased || fresh.runId || !['unknown','dispatching','rejected'].includes(fresh.state)) return false;
+      const month=new Date(fresh.created).toISOString().slice(0,7);
+      for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+        this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(fresh.minutes,scope);
+      fresh.minutesReleased=true;fresh.state='rejected';fresh.dispatchFailureCode=code;this.put(fresh);
+      this.s.event(fresh.task,'remote_check_reservation_released',{id:fresh.id,minutes:fresh.minutes,code});
+      return true;
+    });
+  }
+  recoverRejectedReservations() {
+    // One-time/idempotent reconciliation of legacy definitive HTTP 403 failures.
+    for(const row of this.s.db.prepare("SELECT data FROM remote_checks WHERE state='unknown'").all()){
+      const job=JSON.parse(row.data);
+      const events=this.s.db.prepare("SELECT detail FROM events WHERE task=? AND kind='remote_dispatch_diagnostic'").all(job.task);
+      const rejected=events.some(e=>{try{const d=JSON.parse(e.detail);return d.job===job.id&&/^ACTIONS_HTTP_(?:400|401|403|404|409|422)$/.test(d.code)}catch{return false}});
+      if(rejected)this.releaseRejected(job,'ACTIONS_HTTP_403');
     }
-    for (const [scope] of scopes) this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
+  }
+  async reconcileUnclaimedDispatches() {
+    // Historical uncertain dispatches can be reconciled only after expiry and
+    // after a complete GitHub workflow run listing proves no matching run exists.
+    const candidates=this.s.db.prepare("SELECT data FROM remote_checks WHERE state='unknown'").all()
+      .map(row=>JSON.parse(row.data)).filter(j=>!j.runId&&!j.minutesReleased&&Date.now()>j.expires+60000);
+    if(!candidates.length)return;
+    let runs;
+    try{
+      const result=await this.api('actions/workflows/remote-check.yml/runs?event=workflow_dispatch&per_page=100');
+      if(result.total_count>100||!Array.isArray(result.workflow_runs))return;
+      runs=result.workflow_runs;
+    }catch{return;}
+    for(const job of candidates){
+      // A listing covering the candidate's creation time is necessary.
+      if(runs.length&&Date.parse(runs[runs.length-1].created_at)>job.created)continue;
+      const found=runs.some(run=>run.display_title===`AD507 check ${job.id}`);
+      if(found)continue;
+      this.s.tx(()=>{
+        const fresh=this.get(job.id);
+        if(fresh.minutesReleased||fresh.runId||fresh.state!=='unknown')return;
+        const month=new Date(fresh.created).toISOString().slice(0,7);
+        for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+          this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(fresh.minutes,scope);
+        fresh.minutesReleased=true;fresh.state='rejected';fresh.dispatchFailureCode='NO_GITHUB_RUN_AFTER_EXPIRY';this.put(fresh);
+        this.s.event(fresh.task,'remote_check_reservation_released',{id:fresh.id,minutes:fresh.minutes,code:'NO_GITHUB_RUN_AFTER_EXPIRY'});
+      });
+    }
+  }
+  async reconcileFinishedRuns() {
+    // Reservations are upper bounds, not actual GitHub runner minutes.
+    // Only settle runs whose GitHub API status is definitively completed.
+    const rows=this.s.db.prepare("SELECT data FROM remote_checks WHERE state IN ('claimed','queued','completed','failed','expired')").all();
+    for(const row of rows){
+      const job=JSON.parse(row.data);
+      if(!job.runId||job.minutesReleased||job.minutesSettled)continue;
+      let run,jobs;
+      try{
+        run=await this.api('actions/runs/'+job.runId);
+        if(run.status!=='completed')continue;
+        jobs=await this.api('actions/runs/'+job.runId+'/jobs?per_page=100');
+      }catch{continue;}
+      if(!Array.isArray(jobs.jobs)||jobs.total_count>100)continue;
+      const billed=jobs.jobs.reduce((sum,item)=>{
+        if(!item.started_at||!item.completed_at)return sum;
+        const seconds=Math.max(0,(Date.parse(item.completed_at)-Date.parse(item.started_at))/1000);
+        return sum+Math.max(1,Math.ceil(seconds/60));
+      },0);
+      const actual=Math.min(job.minutes,Math.max(1,billed));
+      this.s.tx(()=>{
+        const fresh=this.get(job.id);
+        if(fresh.minutesSettled||fresh.minutesReleased)return;
+        const refund=fresh.minutes-actual;
+        const month=new Date(fresh.created).toISOString().slice(0,7);
+        for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+          this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(refund,scope);
+        fresh.minutesSettled=actual;this.put(fresh);
+        this.s.event(fresh.task,'remote_check_minutes_settled',{id:fresh.id,reserved:fresh.minutes,actual,refunded:refund,conclusion:run.conclusion});
+      });
+    }
   }
   async api(path, method = 'GET', body) {
     if (!this.c.actionsToken) throw Error('ACTIONS_TOKEN_REQUIRED');
     const response = await this.fetch(`https://api.github.com/repos/${repo}/${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
-      headers: { Authorization: `Bearer ${this.c.actionsToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2026-03-10' }, body: body ? JSON.stringify(body) : undefined });
+      headers: { Authorization: `Bearer ${this.c.actionsToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' }, body: body ? JSON.stringify(body) : undefined });
     if (!response.ok) throw Error(`ACTIONS_HTTP_${response.status}`);
     if (response.status === 204) return null;
     return JSON.parse(await readLimited(response, 512000));
@@ -66,11 +150,37 @@ export class ActionsChecks {
       return { version: 1, task: t.id, project: t.project, check: name, revision: t.revision || 0, base: t.base, files };
     } finally { await rm(dir, { recursive: true, force: true }); }
   }
+  async reconcileRemoteOutcome(job) {
+    // A runner may fail before it can POST a result (checkout, setup, Docker,
+    // controller connectivity). Do not leave the agent waiting until expiry.
+    if (!['queued','claimed'].includes(job.state)) return;
+    let runId=job.runId;
+    try {
+      if(!runId){
+        const listing=await this.api('actions/workflows/remote-check.yml/runs?event=workflow_dispatch&per_page=100');
+        if(!Array.isArray(listing.workflow_runs))return;
+        const match=listing.workflow_runs.find(run=>run.display_title===`AD507 check ${job.id}`&&run.head_sha===job.expectedSHA&&run.head_branch===job.ref);
+        if(!match)return;
+        runId=String(match.id);
+      }
+      const run=await this.api('actions/runs/'+runId);
+      if(run.head_sha!==job.expectedSHA||run.head_branch!==job.ref||run.event!=='workflow_dispatch'||run.display_title!==`AD507 check ${job.id}`||run.repository?.full_name!==repo)return;
+      const fresh=this.get(job.id);
+      if(fresh.state!==job.state)return;
+      if(!fresh.runId){fresh.runId=runId;fresh.runUrl=`https://github.com/${repo}/actions/runs/${runId}`;this.put(fresh);this.s.event(fresh.task,'remote_check_run_discovered',{id:fresh.id,runId});}
+      if(run.status==='completed'&&run.conclusion!=='success'){
+        fresh.state='failed';this.put(fresh);
+        this.s.event(fresh.task,'remote_check_runner_failed',{id:fresh.id,runId,conclusion:run.conclusion});
+      }
+    }catch(error){this.s.event(job.task,'remote_check_reconcile_unavailable',{id:job.id,code:/^ACTIONS_HTTP_\\d+$/.test(error.message)?error.message:'ACTIONS_API_UNAVAILABLE'});}
+  }
   async run(t, project, name, signal) {
     requireCheck(project, name); signal.throwIfAborted();
+    await this.reconcileFinishedRuns();
+    await this.reconcileUnclaimedDispatches();
     // Fail closed: this runner is authenticated against LEVEIA only. Never bill
     // LEVEIA Actions minutes for checks requested by another project.
-    if (project.id !== 'leveia' || project.repository !== repo || t.project !== 'leveia') throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
+    if (project.mode !== 'development' || !project.repository || t.project !== project.id) throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
     if (!this.ready()) throw Error('ACTIONS_NOT_CONFIGURED_OR_BUDGET_UNCONFIRMED');
     const manifest = await this.manifest(t, name);
     const snapshotHash = hash(JSON.stringify(manifest));
@@ -81,24 +191,28 @@ export class ActionsChecks {
     else {
       const id = randomUUID();
       job = { id, task: t.id, project: t.project, check: name, revision: t.revision || 0, fingerprint, snapshotHash, state: 'prepared',
-        expectedSHA: this.c.actionsSHA, ref: this.c.actionsRef, minutes: 10, created: Date.now(), expires: Date.now() + 30 * 60 * 1000, runId: null };
+        expectedSHA: this.c.actionsSHA, ref: this.c.actionsRef, minutes: 0, created: Date.now(), expires: Date.now() + 30 * 60 * 1000, runId: null };
       const payload = gzipSync(Buffer.from(JSON.stringify({ ...manifest, job: id, snapshotHash, expectedSHA: job.expectedSHA })));
       if (payload.length > 16000000) throw Error('SNAPSHOT_TOO_LARGE');
       const directory = join(this.c.root, 'checks'); await mkdir(directory, { recursive: true, mode: 0o700 });
       await writeFile(join(directory, id + '.json.gz'), payload, { mode: 0o600 });
       signal.throwIfAborted();
-      this.s.tx(() => { this.reserve(job); this.put(job); this.s.event(t.id, 'remote_check_reserved', { id, check: name, minutes: job.minutes }); });
+      this.s.tx(() => { this.put(job); this.s.event(t.id, 'remote_check_prepared', { id, check: name }); });
       job.state = 'dispatching'; this.put(job); // Persist BEFORE the external dispatch; never retry an uncertain request automatically.
       try {
-        const result = await this.api(`actions/workflows/ad507-technology-agent-ci.yml/dispatches`, 'POST', { ref: job.ref, inputs: { remote_job: id, remote_ticket: this.ticket(job) } });
+        const result = await this.api(`actions/workflows/remote-check.yml/dispatches`, 'POST', { ref: job.ref, inputs: { remote_job: id, remote_ticket: this.ticket(job) } });
         job = this.get(id);
         if (result?.workflow_run_id && !/^[0-9]+$/.test(String(result.workflow_run_id)))throw Error('RUNNER_IDENTITY_REJECTED');
         if (result?.workflow_run_id) { job.runId = String(result.workflow_run_id); job.runUrl = `https://github.com/${repo}/actions/runs/${job.runId}`; }
         if (job.state === 'dispatching') job.state = 'queued';
         this.put(job);
-      } catch {
+      } catch (error) {
         if(signal.aborted&&this.s.get(t.id).state==='cancelled')await this.cancelTask(t.id);
         job = this.get(id); if (job.state === 'dispatching') { job.state = 'unknown'; this.put(job); }
+        // Preserve uncertainty, but record only a safe, bounded diagnostic code.
+        const dispatchCode=/^ACTIONS_HTTP_(?:400|401|403|404|409|422|429|500|502|503)$/.test(error.message)?error.message:'ACTIONS_DISPATCH_TRANSPORT_ERROR';
+        this.s.event(t.id,'remote_dispatch_diagnostic',{job:id,code:dispatchCode,workflow:'remote-check.yml',ref:job.ref});
+        if(this.releaseRejected(job,dispatchCode))throw Error(dispatchCode);
         throw Error('REMOTE_DISPATCH_UNCERTAIN');
       }
     }
@@ -109,6 +223,7 @@ export class ActionsChecks {
         if (finished.has(job.state)) throw Error('REMOTE_CHECK_' + job.state.toUpperCase());
         if (job.state === 'unknown' || job.state === 'prepared' || job.state === 'dispatching') throw Error('REMOTE_DISPATCH_UNCERTAIN');
         if (Date.now() > job.expires) { job.state = 'expired'; job.cancelPending = true; this.put(job); await this.cancelRun(job); throw Error('REMOTE_CHECK_EXPIRED'); }
+        if(!job.lastRemoteReconcile||Date.now()-job.lastRemoteReconcile>=15000){job.lastRemoteReconcile=Date.now();this.put(job);await this.reconcileRemoteOutcome(job);}
         await new Promise((resolve, reject) => { const done = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); resolve(); };
           const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(Error('REMOTE_WAIT_ABORTED')); };
           const timer = setTimeout(done, this.pollMs); signal.addEventListener('abort', abort, { once: true }); });
@@ -123,7 +238,7 @@ export class ActionsChecks {
     if (!identity || !/^[0-9]+$/.test(String(identity.runId)) || identity.attempt !== 1 || identity.sha !== job.expectedSHA) throw Error('RUNNER_IDENTITY_REJECTED');
     if (job.runId && job.runId !== String(identity.runId)) throw Error('RUNNER_IDENTITY_REJECTED');
     const run = await this.api(`actions/runs/${identity.runId}`);
-    if (run.head_sha !== job.expectedSHA || run.head_branch !== job.ref || run.event !== 'workflow_dispatch' || !['AD507 Technology Agent CI',`AD507 check ${job.id}`].includes(run.name) || run.path?.split('@')[0] !== '.github/workflows/ad507-technology-agent-ci.yml' || run.display_title !== `AD507 check ${job.id}` || run.repository?.full_name !== repo) throw Error('RUNNER_IDENTITY_REJECTED');
+    if (run.head_sha !== job.expectedSHA || run.head_branch !== job.ref || run.event !== 'workflow_dispatch' || !['AS Developer Remote Check',`AD507 check ${job.id}`].includes(run.name) || run.path?.split('@')[0] !== '.github/workflows/remote-check.yml' || run.display_title !== `AD507 check ${job.id}` || run.repository?.full_name !== repo) throw Error('RUNNER_IDENTITY_REJECTED');
   }
   async claim(id, ticket, identity) {
     let job = this.authenticate(id, ticket); if (finished.has(job.state)) throw Error('REMOTE_JOB_FINISHED');

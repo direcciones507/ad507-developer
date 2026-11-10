@@ -19,7 +19,7 @@ async function fixture(t, overrides={}){
   const c={...loadConfig({AD507_DATA_DIR:join(root,'data'),AD507_PROVIDER:'simulation',AD507_LEVEIA_SOURCE:source}),checkBackend:'github-actions',actionsToken:'fixture-token',actionsIncludedOnly:true,actionsSHA:sha,actionsRef:'ad507/task-developer-runtime',actionsMonthlyMinutes:60,actionsProjectMinutes:60,actionsTaskMinutes:30,...overrides};
   const s=new Store(c.root),w=new Workspace(c);const job=s.create('leveia','Remote fixture',250000,'simulation');await w.prepare(job,c.projects.leveia);job.state='running';s.save(job);
   const calls=[];const fetchImpl=async(url,options={})=>{calls.push({url,options});if(url.endsWith('/dispatches'))return Response.json({workflow_run_id:123});if(url.endsWith('/cancel'))return new Response(null,{status:204});
-    if(url.endsWith('/actions/runs/123')){const record=JSON.parse(s.db.prepare('SELECT data FROM remote_checks ORDER BY rowid DESC LIMIT 1').get().data);return Response.json({head_sha:sha,head_branch:c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${record.id}`,path:'.github/workflows/ad507-technology-agent-ci.yml',display_title:`AD507 check ${record.id}`,repository:{full_name:'direcciones507/leveia'}});}throw Error('unexpected URL');};
+    if(url.endsWith('/actions/runs/123')){const record=JSON.parse(s.db.prepare('SELECT data FROM remote_checks ORDER BY rowid DESC LIMIT 1').get().data);return Response.json({head_sha:sha,head_branch:c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${record.id}`,path:'.github/workflows/remote-check.yml',display_title:`AD507 check ${record.id}`,repository:{full_name:'direcciones507/ad507-developer'}});}throw Error('unexpected URL');};
   let remote=new ActionsChecks(c,s,w,{fetchImpl,pollMs:5});w.remote=remote;
   t.after(async()=>{try{s.close();}catch{}await rm(root,{recursive:true,force:true});});
   return {root,c,s,w,job,remote,calls,fetchImpl};
@@ -81,7 +81,7 @@ test('remote receipt and minute ledger survive closing and reopening the actual 
  const f=await fixture(t);const ac=new AbortController();const waiting=f.remote.run(f.job,f.c.projects.leveia,'agent-test',ac.signal);const j=await dispatched(f),ticket=f.remote.ticket(j);
  f.job.state='paused';f.s.save(f.job);ac.abort();await assert.rejects(waiting);f.s.close();
  const reopened=new Store(f.c.root);try{
-  const restored=new ActionsChecks(f.c,reopened,f.w,{pollMs:5,fetchImpl:async()=>Response.json({head_sha:sha,head_branch:f.c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${j.id}`,path:'.github/workflows/ad507-technology-agent-ci.yml',display_title:`AD507 check ${j.id}`,repository:{full_name:'direcciones507/leveia'}})});
+  const restored=new ActionsChecks(f.c,reopened,f.w,{pollMs:5,fetchImpl:async()=>Response.json({head_sha:sha,head_branch:f.c.actionsRef,event:'workflow_dispatch',name:`AD507 check ${j.id}`,path:'.github/workflows/remote-check.yml',display_title:`AD507 check ${j.id}`,repository:{full_name:'direcciones507/ad507-developer'}})});
   assert.equal(restored.ticket(j),ticket);assert.equal(restored.usage(),10);await restored.claim(j.id,ticket,identity);restored.complete(j.id,ticket,identity,receipt(j));
   const task=reopened.get(f.job.id);task.state='running';reopened.save(task);assert.equal((await restored.run(task,f.c.projects.leveia,'agent-test',new AbortController().signal)).passed,true);assert.equal(restored.usage(),10);
  }finally{reopened.close();}

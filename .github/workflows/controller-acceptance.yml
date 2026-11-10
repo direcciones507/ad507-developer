@@ -1,0 +1,37 @@
+name: AS Developer | Production image acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/as-developer-agent-start-20261109
+    paths:
+      - '.github/workflows/controller-acceptance.yml'
+      - 'Dockerfile'
+      - 'deploy/**'
+      - 'runtime/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  controller-acceptance:
+    name: Deployable image, persistent volume and restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build exact production Dockerfile
+        run: docker build -f Dockerfile -t ad507-controller:ci .
+      - name: Verify controller with fresh persistent volume and restart
+        run: npm run test:controller

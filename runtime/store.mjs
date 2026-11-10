@@ -21,7 +21,8 @@ export class Store {
         kind TEXT NOT NULL, detail TEXT NOT NULL, created TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS budgets(project TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS reservations(id TEXT PRIMARY KEY, task TEXT NOT NULL, amount INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     this.recover();
   }
   tx(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const r = fn(); this.db.exec('COMMIT'); return r; } catch(e) { this.db.exec('ROLLBACK'); throw e; } }
@@ -42,10 +43,100 @@ export class Store {
   reserve(t, amount, projectCap, globalCap=Number.MAX_SAFE_INTEGER) {
     if(!Number.isSafeInteger(amount)||amount<=0)throw Error('INVALID_RESERVATION');
     return this.tx(()=>{const fresh=this.get(t.id);const used=this.projectUsage(t.project);
+      t.budget=fresh.budget;
       if(fresh.reserved+amount>fresh.budget||used+amount>projectCap||this.globalUsage()+amount>globalCap)throw Error('BUDGET_EXHAUSTED');
       const id=randomUUID(); this.db.prepare('INSERT INTO reservations VALUES(?,?,?)').run(id,t.id,amount);
       this.db.prepare('INSERT INTO budgets VALUES(?,?) ON CONFLICT(project) DO UPDATE SET reserved=reserved+excluded.reserved').run(t.project,amount);
-      t.reserved=fresh.reserved+amount; this.save(t);this.event(t.id,'budget_reserved',{id,amount});return id;});
+      t.reserved=fresh.reserved+amount; this.save(t);this.event(t.id,'budget_reserved',{id,amount,scope:'single_provider_call',taskLimit:fresh.budget,globalLimit:globalCap});return id;});
+  }
+  settle(t, reservationId, actual) {
+    if(!Number.isSafeInteger(actual)||actual<0)throw Error('INVALID_SETTLEMENT');
+    return this.tx(()=>{
+      const row=this.db.prepare('SELECT amount FROM reservations WHERE id=? AND task=?').get(reservationId,t.id);
+      if(!row)throw Error('RESERVATION_NOT_FOUND');
+      if(actual>row.amount)throw Error('ACTUAL_COST_EXCEEDS_RESERVATION');
+      const released=row.amount-actual;
+      this.db.prepare('UPDATE reservations SET amount=? WHERE id=?').run(actual,reservationId);
+      this.db.prepare('UPDATE budgets SET reserved=reserved-? WHERE project=?').run(released,t.project);
+      const fresh=this.get(t.id);t.reserved=fresh.reserved-released;
+      this.save(t);this.event(t.id,'budget_settled',{id:reservationId,reserved:row.amount,actual,released});
+      return released;
+    });
+  }
+  releaseUnsentReservation(taskId,reservationId,reason){
+    // Only a positively verified non-dispatch may be released; never infer it from a failed task.
+    if(reason!=='provider_not_dispatched')throw Error('RELEASE_EVIDENCE_REQUIRED');
+    return this.tx(()=>{
+      const row=this.db.prepare('SELECT amount FROM reservations WHERE id=? AND task=?').get(reservationId,taskId);
+      if(!row)throw Error('RESERVATION_NOT_FOUND');
+      const t=this.get(taskId);
+      this.db.prepare('DELETE FROM reservations WHERE id=?').run(reservationId);
+      this.db.prepare('UPDATE budgets SET reserved=reserved-? WHERE project=?').run(row.amount,t.project);
+      t.reserved-=row.amount;this.save(t);
+      this.event(taskId,'budget_released_unsent',{id:reservationId,amount:row.amount,reason});
+      return row.amount;
+    });
+  }
+  resetOldWork(){
+    return this.tx(()=>{
+      const active=this.db.prepare("SELECT COUNT(*) AS n FROM tasks WHERE state IN ('running','pending')").get().n;
+      if(active)throw Error('ACTIVE_TASKS_MUST_FINISH_FIRST');
+      this.db.exec("CREATE TABLE IF NOT EXISTS archived_budget_resets(id TEXT PRIMARY KEY, created TEXT NOT NULL, snapshot TEXT NOT NULL)");
+      const id=randomUUID();
+      const snapshot={tasks:this.db.prepare('SELECT * FROM tasks').all(),events:this.db.prepare('SELECT * FROM events').all(),reservations:this.db.prepare('SELECT * FROM reservations').all(),budgets:this.db.prepare('SELECT * FROM budgets').all()};
+      this.db.prepare('INSERT INTO archived_budget_resets VALUES(?,?,?)').run(id,new Date().toISOString(),JSON.stringify(snapshot));
+      this.db.exec('DELETE FROM reservations; DELETE FROM budgets; DELETE FROM tasks; DELETE FROM events;');
+      this.event(null,'owner_archived_old_work_and_reset_budget',{archiveId:id,taskCount:snapshot.tasks.length,reservationCount:snapshot.reservations.length,previousReserved:snapshot.budgets.reduce((sum,b)=>sum+b.reserved,0)});
+      return {ok:true,archiveId:id,archivedTasks:snapshot.tasks.length,archivedReservations:snapshot.reservations.length,reserved:0};
+    });
+  }
+  globalBudgetLimit(fallback){const row=this.db.prepare("SELECT value FROM settings WHERE key='global_budget_micro_usd'").get();const value=row?Number(row.value):fallback;if(!Number.isSafeInteger(value)||value<1)throw Error('INVALID_GLOBAL_BUDGET');return value;}
+  setGlobalBudgetLimit(amount,baseline){
+    if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
+    return this.tx(()=>{const previous=this.globalBudgetLimit(baseline);if(amount<this.globalUsage())throw Error('BUDGET_BELOW_COMMITTED_USAGE');this.db.prepare("INSERT INTO settings(key,value) VALUES('global_budget_micro_usd',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(amount));
+      let adjustedTasks=0;
+      if(amount>previous){
+        const oldSuggested=Math.max(1,previous-10000),newSuggested=Math.max(1,amount-10000);
+        for(const row of this.db.prepare("SELECT data FROM tasks WHERE state IN ('pending','running','paused','awaiting_approval')").all()){
+          const task=JSON.parse(row.data);
+          // Only follow the global cap for tasks already using the old automatic suggestion.
+          // Explicit smaller per-task limits are intentionally left untouched.
+          if(task.budget===oldSuggested||task.budget===previous){
+            task.budget=Math.max(task.budget,newSuggested);
+            this.save(task);
+            this.event(task.id,'task_budget_auto_adjusted',{previousBudget:oldSuggested,newBudget:task.budget,globalLimit:amount});
+            adjustedTasks++;
+          }
+        }
+      }
+      this.event(null,'global_budget_limit_changed',{previous,amount,adjustedTasks});return {previous,amount,adjustedTasks};});
+  }
+  budgetBreakdown(){
+    const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.state FROM reservations r LEFT JOIN tasks t ON t.id=r.task").all();
+    const settledIds=new Set();
+    for(const e of this.db.prepare("SELECT detail FROM events WHERE kind='budget_settled'").all()){
+      try{const id=JSON.parse(e.detail).id;if(typeof id==='string')settledIds.add(id);}catch{}
+    }
+    let settled=0,unattributed=0,active=0;
+    for(const r of rows){
+      if(settledIds.has(r.id))settled+=r.amount;
+      else unattributed+=r.amount;
+      if(['running','pending'].includes(r.state))active+=r.amount;
+    }
+    return {settledHistorical:settled,unattributedHistorical:unattributed,activeTaskReservations:active,recordCount:rows.length,period:'all-time',externalProviderVerified:false};
+  }
+  budgetAudit(){
+    const projects=this.db.prepare('SELECT project,reserved FROM budgets ORDER BY project').all();
+    const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.project,t.state,t.data FROM reservations r LEFT JOIN tasks t ON t.id=r.task ORDER BY t.updated DESC").all();
+    const reservations=rows.map(r=>{
+      const t=r.data?JSON.parse(r.data):null;
+      const events=this.db.prepare("SELECT kind,detail FROM events WHERE task=? AND kind IN ('budget_reserved','budget_settled') ORDER BY seq").all(r.task);
+      const settled=events.some(e=>{if(e.kind!=='budget_settled')return false;try{return JSON.parse(e.detail).id===r.id;}catch{return false;}});
+      return {id:r.id,task:r.task,project:r.project||null,state:r.state||'missing',amount:r.amount,settlementVerified: settled,settlementStatus:settled?'verified':'historical_unattributed',uncertain:!settled,taskReserved:t?.reserved??null};
+    });
+    const reservationTotal=reservations.reduce((n,r)=>n+r.amount,0);
+    const budgetTotal=projects.reduce((n,p)=>n+p.reserved,0);
+    return {budgetTotal,reservationTotal,consistent:budgetTotal===reservationTotal,projects,reservations,notice:'Read-only accounting. Historical settlements lack reservation IDs and may have occurred. A failed task is not evidence of zero provider cost; no automatic refund is authorized.'};
   }
   globalUsage(){return this.db.prepare('SELECT COALESCE(SUM(reserved),0) AS total FROM budgets').get().total;}
   projectUsage(id){return this.db.prepare('SELECT reserved FROM budgets WHERE project=?').get(id)?.reserved??0;}

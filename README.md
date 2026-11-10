@@ -1,4 +1,4 @@
-# AD507 Developer
+# AS Developer
 
 Independent controller recovered from `direcciones507/leveia`, branch `ad507/task-developer-runtime`, exact source `4d00cae250ed713fe6a26190a1233ff4969291d9`.
 
@@ -33,7 +33,7 @@ Keep the same service, domain, volume `/data` and `AD507_DATA_DIR=/data/ad507`. 
 
 ## Controlled checks
 
-GitHub Actions is disabled in the standalone configuration, and the operational entrypoint never loads its dispatcher. There are no `.github/workflows` files. Historical Actions modules/tests remain for traceability and offline protocol regression; they are not an operational backend.
+GitHub Actions is disabled in the standalone configuration, and the operational entrypoint never loads its dispatcher. A bounded `.github/workflows/safe-ci.yml` validates this public repository only; it is not the agent's execution backend. Historical Actions modules/tests remain for traceability and offline protocol regression; they are not an operational backend.
 
 `local-docker` requires a dedicated Docker-capable execution environment with reviewed images. The Railway controller image deliberately has no Docker daemon or socket. **The existing Railway service alone cannot currently execute these code checks. No remote Docker worker is provisioned or connected by this migration.** Never attach a privileged host socket to this web controller as a workaround. A separate authenticated executor integration and real boundary validation remain open; no host-shell fallback exists.
 

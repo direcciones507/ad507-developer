@@ -1,0 +1,32 @@
+name: AS Developer | Isolated Docker smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [work/as-developer-agent-start-20261109]
+    paths: ['.github/workflows/docker-smoke.yml', 'runtime/**', 'deploy/checks-ci.Dockerfile', 'package.json', 'package-lock.json']
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-smoke:
+    name: Real Docker boundary check
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build reviewed sandbox image
+        run: docker build -f deploy/checks-ci.Dockerfile -t ad507-checks:ci .
+      - name: Run real isolated checks without provider secrets
+        run: npm run test:sandbox
