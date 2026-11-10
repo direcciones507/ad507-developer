@@ -115,7 +115,10 @@ export class Engine {
           t.reason=t.provider==='simulation'?'Simulación, sin inferencia pagada. Revisar entregable.':'Revisar cambios y pruebas antes de preparar PR.';
           // Read-only diagnostics cannot change code and must not require a paid remote check.
           // Keep the passing-check gate for every task that modified files.
-          if(t.provider!=='simulation'&&p.mode!=='preparation'&&t.files.length>0&&!t.checks.some(c=>c.passed&&c.revision===(t.revision||0)))throw Error('PASSING_CHECK_REQUIRED');
+          if(t.provider!=='simulation'&&p.mode!=='preparation'&&t.files.length>0&&!t.checks.some(c=>c.passed&&c.revision===(t.revision||0))){
+            t.reason='Cambios preparados SIN PRUEBAS AUTOMÁTICAS. Revisión humana obligatoria antes de crear PR; no afirmar que el código está validado.';
+            this.s.event(t.id,'delivery_unverified',{files:t.files,reason:'AUTOMATED_CHECK_NOT_RUN'});
+          }
           this.s.save(t);this.s.event(t.id,'delivery_ready',{files:t.files,checks:t.checks.map(c=>({check:c.check,passed:c.passed}))});return;
         }
       }
