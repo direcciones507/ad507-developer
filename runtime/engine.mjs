@@ -123,6 +123,7 @@ export class Engine {
         }
         if(Buffer.byteLength(JSON.stringify(t.messages))>160000)throw Error('CONTEXT_LIMIT');
         validateToolSequence(t.messages);
+        t.budget=Math.max(t.budget,this.s.get(t.id).budget);
         const availableBudget=Math.min(t.budget-t.reserved,this.s.globalBudgetLimit(this.c.globalCap)-this.s.globalUsage());
         const inputEstimate=this.provider.estimate(t.messages,0);
         const outputAllowance=Math.min(this.c.maxOutput,Math.floor((availableBudget-inputEstimate)/this.c.outputRate));
