@@ -95,8 +95,7 @@ export class Engine {
     if(this.active.size)return;
     const t=this.s.list().reverse().find(t=>t.state==='pending');if(!t)return;
     const controller=new AbortController();this.active.set(t.id,controller);
-    const started=Date.now();const remaining=this.c.maxTaskMs-(t.elapsedMs||0);
-    const timeout=setTimeout(()=>controller.abort(),Math.max(1,remaining));
+    const started=Date.now();
     try{
       const p=projectFor(this.c,t.project);if(t.provider!==this.c.provider)throw Error('PROVIDER_CONFIGURATION_CHANGED');
       if(t.phase!=='publish'&&!providerReady(this.c))throw Error('PROVIDER_NOT_CONFIGURED');
@@ -113,8 +112,7 @@ export class Engine {
         t.inflight=null;const current=this.s.get(t.id);t.state=['cancelled','paused','awaiting_approval'].includes(current.state)?current.state:'completed';t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'pr_created',t.delivery);return;
       }
       while(this.s.get(t.id).state==='running'){
-        controller.signal.throwIfAborted();if(Date.now()-started>remaining)throw Error('TASK_TIMEOUT');
-        if(t.steps>=this.c.maxSteps)throw Error('STEP_LIMIT');
+        controller.signal.throwIfAborted();
         if(t.pendingCalls?.length){
           const call=t.pendingCalls[0];t.inflight={kind:'tool',id:call.id,name:call.function?.name};this.checkpoint(t);
           let result;try{result=await this.execute(t,p,call,controller.signal);}catch(e){
@@ -183,7 +181,7 @@ export class Engine {
         }else{t.state='failed';t.reason=e.message;this.s.save(t);this.s.event(t.id,'worker_failed',{reason:t.reason});}
       }else if(e.message==='REMOTE_DISPATCH_UNCERTAIN'){t.state='awaiting_approval';t.gate='recovery';t.reason='Resultado del envío remoto incierto. No se reintenta automáticamente; revisar el job antes de continuar.';this.s.save(t);this.s.event(t.id,'remote_dispatch_review_required');}
       else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);const site=String(e.stack||'').split('\n').slice(1).find(line=>/runtime\/(engine|provider|store)\.mjs:\d+/.test(line))?.match(/runtime\/(engine|provider|store)\.mjs:(\d+)/);this.s.event(t.id,'worker_failed',{reason:t.reason,...(t.reason==='EXECUTION_FAILED'?{errorType:String(e.name||'Error').slice(0,60),site:site?site[1]+':'+site[2]:'unknown'}:{})});}
-    }finally{clearTimeout(timeout);const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
+    }finally{const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
   }
   checkpoint(t){const current=this.s.get(t.id);if(['paused','cancelled','awaiting_approval'].includes(current.state)){t.state=current.state;t.gate=current.gate;t.reason=current.reason;}this.s.save(t);}
   async execute(t,p,call,signal){
