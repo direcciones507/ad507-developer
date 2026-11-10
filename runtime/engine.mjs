@@ -64,7 +64,7 @@ export class Engine {
       t.state='running';this.s.save(t);this.s.event(t.id,'worker_started',{phase:t.phase});
       if(t.phase==='workspace'){
         t.inflight={kind:'workspace'};this.s.save(t);await this.w.prepare(t,p);t.inflight=null;t.phase='model';
-        t.messages=[{role:'system',content:engineeringInstructions(t.project,p.mode)},{role:'user',content:t.instructions}];this.checkpoint(t);
+        t.messages=[{role:'system',content:engineeringInstructions(t.project,p.mode)+'\nEXECUTION PRIORITY: You have a limited tool budget. Inspect at most 8 relevant files, choose one narrowly scoped change, then use replace_repository_text or write_repository_file. Do not perform a broad repository audit or repeatedly read files. If no safe concrete change is justified, report that honestly instead of exhausting steps.'},{role:'user',content:t.instructions}];this.checkpoint(t);
         this.s.event(t.id,'repository_snapshot',{repository:p.repository,baseBranch:p.baseBranch,base:t.base,branch:t.branch,workspace:`workspaces/${t.project}/${t.id}`});
       }
       if(t.phase==='publish'){
@@ -83,7 +83,7 @@ export class Engine {
             this.s.event(t.id,'tool_failed',{tool:call.function?.name,code:safeCode});
             throw Error(safeCode);
           }
-          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
+          t.messages.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(result)});if(call.function.name==='read_repository_file' && !t.files?.length){t.readsWithoutEdit=(t.readsWithoutEdit||0)+1;if(t.readsWithoutEdit===8)t.messages.push({role:'user',content:'You have inspected eight files without editing. Stop broad exploration. Make one safe, focused code change using a write tool now, or explain precisely why no safe change can be made. Do not request further file reads.'});}t.pendingCalls.shift();t.inflight=null;t.steps++;t.files=await this.w.diff(t);
           this.checkpoint(t);this.s.event(t.id,'tool_completed',{tool:call.function.name,files:t.files,...(call.function.name==='list_repository_files'?{listing:{status:result.status,totalFiles:result.totalFiles,matchedCount:result.matchedCount,paths:result.files.slice(0,50)}}:{})});continue;
         }
         if(t.noProgress){
