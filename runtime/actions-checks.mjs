@@ -150,6 +150,30 @@ export class ActionsChecks {
       return { version: 1, task: t.id, project: t.project, check: name, revision: t.revision || 0, base: t.base, files };
     } finally { await rm(dir, { recursive: true, force: true }); }
   }
+  async reconcileRemoteOutcome(job) {
+    // A runner may fail before it can POST a result (checkout, setup, Docker,
+    // controller connectivity). Do not leave the agent waiting until expiry.
+    if (!['queued','claimed'].includes(job.state)) return;
+    let runId=job.runId;
+    try {
+      if(!runId){
+        const listing=await this.api('actions/workflows/remote-check.yml/runs?event=workflow_dispatch&per_page=100');
+        if(!Array.isArray(listing.workflow_runs))return;
+        const match=listing.workflow_runs.find(run=>run.display_title===`AD507 check ${job.id}`&&run.head_sha===job.expectedSHA&&run.head_branch===job.ref);
+        if(!match)return;
+        runId=String(match.id);
+      }
+      const run=await this.api('actions/runs/'+runId);
+      if(run.head_sha!==job.expectedSHA||run.head_branch!==job.ref||run.event!=='workflow_dispatch'||run.display_title!==`AD507 check ${job.id}`||run.repository?.full_name!==repo)return;
+      const fresh=this.get(job.id);
+      if(fresh.state!==job.state)return;
+      if(!fresh.runId){fresh.runId=runId;fresh.runUrl=`https://github.com/${repo}/actions/runs/${runId}`;this.put(fresh);this.s.event(fresh.task,'remote_check_run_discovered',{id:fresh.id,runId});}
+      if(run.status==='completed'&&run.conclusion!=='success'){
+        fresh.state='failed';this.put(fresh);
+        this.s.event(fresh.task,'remote_check_runner_failed',{id:fresh.id,runId,conclusion:run.conclusion});
+      }
+    }catch(error){this.s.event(job.task,'remote_check_reconcile_unavailable',{id:job.id,code:/^ACTIONS_HTTP_\\d+$/.test(error.message)?error.message:'ACTIONS_API_UNAVAILABLE'});}
+  }
   async run(t, project, name, signal) {
     requireCheck(project, name); signal.throwIfAborted();
     await this.reconcileFinishedRuns();
@@ -199,6 +223,7 @@ export class ActionsChecks {
         if (finished.has(job.state)) throw Error('REMOTE_CHECK_' + job.state.toUpperCase());
         if (job.state === 'unknown' || job.state === 'prepared' || job.state === 'dispatching') throw Error('REMOTE_DISPATCH_UNCERTAIN');
         if (Date.now() > job.expires) { job.state = 'expired'; job.cancelPending = true; this.put(job); await this.cancelRun(job); throw Error('REMOTE_CHECK_EXPIRED'); }
+        if(!job.lastRemoteReconcile||Date.now()-job.lastRemoteReconcile>=15000){job.lastRemoteReconcile=Date.now();this.put(job);await this.reconcileRemoteOutcome(job);}
         await new Promise((resolve, reject) => { const done = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); resolve(); };
           const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(Error('REMOTE_WAIT_ABORTED')); };
           const timer = setTimeout(done, this.pollMs); signal.addEventListener('abort', abort, { once: true }); });
