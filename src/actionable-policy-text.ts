@@ -19,12 +19,12 @@ export function actionablePolicyText(task: string) {
   // only recognized prohibitions directly adjacent to a protected term.
   // Split at sentence boundaries, then discard negative-only clauses for the
   // approval classifier. Preserve positive requests following "pero"/"but".
-  return task.split(/([.;\\n])/).map(part => {
+  return task.split(/([.;\n])/).map(part => {
     if (/^[.;\\n]$/.test(part)) return part;
-    const clauses=part.split(/\\b(?:pero|but|however)\\b/i);
+    const clauses=part.split(/\b(?:pero|but|however)\b/i);
     return clauses.map(clause => {
-      const trimmed=clause.trim().replace(/^[-*\\d)\\s]+/,'');
-      if (/^(?:no|nunca|jam[aá]s|do not|don't|never)\\b/i.test(trimmed)) return ' ';
+      const trimmed=clause.trim().replace(/^[-*\d)\s]+/,'');
+      if (/^(?:no|nunca|jam[aá]s|do not|don't|never)\b/i.test(trimmed)) return ' ';
       return clause.replace(protectedActionNegation,' ');
     }).join(' ');
   }).join('');
