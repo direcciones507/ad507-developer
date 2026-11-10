@@ -117,14 +117,14 @@ export function createApp(c,s,e){
         if(req.method==='GET'&&match[2]==='file'){const file=url.searchParams.get('path');if(!t.files.includes(file))throw Error('FILE_NOT_IN_DELIVERABLE');return send(200,{path:file,content:await e.w.read(t,file)});}
         if(req.method==='POST'&&match[2]==='control'){
           if(body.action==='recover'){
-            if(t.state!=='failed'||t.reason!=='BUDGET_EXHAUSTED'||t.phase!=='model'||!t.branch)throw Error('RECOVERY_NOT_ELIGIBLE');
+            if(t.state!=='failed'||!['BUDGET_EXHAUSTED','CHECK_NOT_AUTHORIZED'].includes(t.reason)||t.phase!=='model'||!t.branch)throw Error('RECOVERY_NOT_ELIGIBLE');
             const changed=await e.w.diff(t);
             if(!changed.length)throw Error('NO_RECOVERABLE_CHANGES');
             t.files=changed;t.pendingCalls=[];t.inflight=null;t.state='awaiting_approval';t.gate='delivery';
-            t.summary='Se recuperaron '+changed.length+' archivos de una tarea detenida por presupuesto. Entrega parcial sin pruebas y sin publicación. Revisar los cambios antes de aprobar.';
-            t.reason='Recuperación de archivos tras BUDGET_EXHAUSTED. Trabajo incompleto y no verificado.';
-            s.save(t);s.event(id,'delivery_unverified',{files:changed,reason:'RECOVERED_BUDGET_EXHAUSTED'});
-            s.event(id,'delivery_ready',{files:changed,partial:true,stopReason:'BUDGET_EXHAUSTED'});
+            t.summary='Se recuperaron '+changed.length+' archivos de una tarea detenida por '+(t.reason==='CHECK_NOT_AUTHORIZED'?'prueba no autorizada':'presupuesto')+'. Entrega parcial sin pruebas y sin publicación. Revisar los cambios antes de aprobar.';
+            const stopReason=t.reason;t.reason='Recuperación de archivos tras '+stopReason+'. Trabajo incompleto y no verificado.';
+            s.save(t);s.event(id,'delivery_unverified',{files:changed,reason:'RECOVERED_'+stopReason});
+            s.event(id,'delivery_ready',{files:changed,partial:true,stopReason});
             return send(200,publicTask(t));
           }
           return send(200,publicTask(e.control(id,body.action)));
