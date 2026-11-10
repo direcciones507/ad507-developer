@@ -63,6 +63,15 @@
       "baseBranch": "work/as-developer-agent-start-20261109",
       "productionWrite": false,
       "mergeMain": false
+    },
+    "as-ai-assistant": {
+      "name": "AS AI Assistant (plataforma de asistentes)",
+      "repository": "direcciones507/AD507-ia-assistant",
+      "baseBranch": "main",
+      "enabled": true,
+      "mode": "development",
+      "productionWrite": false,
+      "mergeMain": false
     }
   }
 }
