@@ -78,7 +78,12 @@ export class Engine {
       }else if(t.gate==='recovery'){
         // Interrupted LLM calls keep their full reservation. Tool mutation is never replayed.
         // For uncertain tools drop remaining calls and re-inspect the workspace on a fresh model turn.
-        if(t.inflight?.kind==='tool'){const index=t.messages.findIndex(m=>m.role==='assistant'&&m.tool_calls?.some(c=>!t.messages.some(r=>r.tool_call_id===c.id)));if(index>=0)t.messages=t.messages.slice(0,index);}
+        if(t.inflight?.kind==='tool'){
+          // Drop only the unresolved assistant tool-call batch and any following messages.
+          // Earlier resolved calls and their tool results must remain paired.
+          const index=t.messages.findLastIndex(m=>m.role==='assistant'&&m.tool_calls?.some(c=>!t.messages.some(r=>r.role==='tool'&&r.tool_call_id===c.id)));
+          if(index>=0)t.messages=t.messages.slice(0,index);
+        }
         t.pendingCalls=[];t.inflight=null;
         if(t.phase==='workspace'){t.state='failed';t.reason='Workspace interrumpido. Conservar para inspección y crear otra tarea; no repetir inicialización.';}
         else {t.state='pending';t.messages.push({role:'user',content:'Operator reviewed interruption. Re-inspect files and diff before further edits. Do not assume previous tool succeeded.'});}
