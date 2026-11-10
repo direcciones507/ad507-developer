@@ -24,7 +24,9 @@ export class Engine {
       {id:'direcciones507',match:/\b(?:Direcciones507|Direcciones LATAM|direcciones\.lat)\b/i}
     ];
     const targetHeader=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:PROYECTO\s*(?:OBJETIVO|A MODIFICAR|DE DESTINO)?|REPOSITORIO\s*(?:OBJETIVO|DE DESTINO)?)\s*[:：]\s*([^\n]{1,120})/i)?.[1]||'';
-    if(targetHeader&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeader)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Ignore repository owner/path and issue URLs in a target header: an owner such as direcciones507 is not a project declaration.
+    const targetHeaderName=targetHeader.replace(/https?:\/\/\S+/gi,' ').replace(/\b[a-z0-9_.-]+\/[a-z0-9_.-]+\b/gi,' ');
+    if(targetHeaderName&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeaderName)))throw Error('PROJECT_SELECTION_MISMATCH');
     // Refuse ambiguous coding requests when the selected repository and the
     // named implementation target clearly disagree. Mentions elsewhere remain allowed.
     const codingFocus=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
