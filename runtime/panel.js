@@ -29,7 +29,7 @@ async function refresh(){
 }
 async function detail(id){if(selected!==id){$('file-content').hidden=true;$('file-content').textContent='';}selected=id;const t=await api('tasks/'+id);$('detail').hidden=false;$('task-title').textContent=t.project+' · '+id.slice(0,8);$('task-state').textContent=labels[t.state];$('task-reason').textContent=t.reason||'';
   $('controls').replaceChildren();let actions=[];if(['pending','running'].includes(t.state))actions.push(['pause','Pausar']);if(t.state==='paused')actions.push(['resume','Reanudar']);if(t.state==='awaiting_approval'&&t.gate!=='scope'){if(t.gate==='delivery'&&!status.publishing){const msg=$('task-action-result');msg.hidden=false;msg.textContent='Publicación de Pull Requests desactivada en Railway (AD507_PUBLISH_ENABLED). Los cambios siguen seguros en el espacio de trabajo; no se han enviado a GitHub.';}else actions.push(['approve',t.gate==='recovery'?'Revisé la interrupción; continuar':'Aprobar entrega']);actions.push(['reject','Rechazar']);}if(!['completed','failed','cancelled'].includes(t.state))actions.push(['cancel','Cancelar']);
-  if(t.state==='failed'&&t.reason==='BUDGET_EXHAUSTED'&&t.files?.length){
+  if(t.state==='failed'&&['BUDGET_EXHAUSTED','CHECK_NOT_AUTHORIZED'].includes(t.reason)&&t.files?.length){
     const recover=node('button','Recuperar cambios sin gastar en IA');recover.type='button';recover.className='secondary';
     recover.addEventListener('click',async()=>{recover.disabled=true;try{await api('tasks/'+id+'/control','POST',{action:'recover'});await refresh();}catch(e){showError(e);}finally{recover.disabled=false;}});
     $('controls').append(recover);
