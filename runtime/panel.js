@@ -29,6 +29,11 @@ async function refresh(){
 }
 async function detail(id){if(selected!==id){$('file-content').hidden=true;$('file-content').textContent='';}selected=id;const t=await api('tasks/'+id);$('detail').hidden=false;$('task-title').textContent=t.project+' · '+id.slice(0,8);$('task-state').textContent=labels[t.state];$('task-reason').textContent=t.reason||'';
   $('controls').replaceChildren();let actions=[];if(['pending','running'].includes(t.state))actions.push(['pause','Pausar']);if(t.state==='paused')actions.push(['resume','Reanudar']);if(t.state==='awaiting_approval'&&t.gate!=='scope')actions.push(['approve',t.gate==='recovery'?'Revisé la interrupción; continuar':'Aprobar entrega'],['reject','Rechazar']);if(!['completed','failed','cancelled'].includes(t.state))actions.push(['cancel','Cancelar']);
+  if(t.state==='failed'&&t.reason==='BUDGET_EXHAUSTED'&&t.files?.length){
+    const recover=node('button','Recuperar cambios sin gastar en IA');recover.type='button';recover.className='secondary';
+    recover.addEventListener('click',async()=>{recover.disabled=true;try{await api('tasks/'+id+'/control','POST',{action:'recover'});await refresh();}catch(e){showError(e);}finally{recover.disabled=false;}});
+    $('controls').append(recover);
+  }
   for(const [action,label]of actions){const b=node('button',label);b.className=['cancel','reject'].includes(action)?'danger':'secondary';b.addEventListener('click',async()=>{b.disabled=true;try{await api('tasks/'+id+'/control','POST',{action});await refresh();}catch(e){showError(e);}finally{b.disabled=false;}});$('controls').append(b);}
   $('metrics').replaceChildren();for(const [label,value]of [['Rama',t.branch||'Por crear'],['Consumo contabilizado / máximo autorizado de la tarea',money(t.reserved)+' / '+money(t.budget)],['Pasos',t.steps],['Tokens entrada',t.usage.input],['Tokens salida',t.usage.output],['Etapa',t.phase],['Paso interrumpido',t.interrupted?.name||t.interrupted?.kind||'Ninguno']]){const d=node('div','');d.append(node('dt',label),node('dd',String(value)));$('metrics').append(d);}
   const overview=$('delivery-overview');overview.replaceChildren();
