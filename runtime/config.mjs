@@ -25,7 +25,7 @@ export function loadConfig(env=process.env) {
     port:Number(env.PORT||8787),host:env.AD507_HOST||'127.0.0.1',
     model:env.AD507_MODEL||env.DEEPSEEK_MODEL||'deepseek-flash',apiKey:env.DEEPSEEK_API_KEY,
     inputRate:Number(env.AD507_INPUT_MICROUSD_PER_TOKEN||0),outputRate:Number(env.AD507_OUTPUT_MICROUSD_PER_TOKEN||0),
-    maxOutput:2048,maxSteps:40,maxTaskMs:30*60*1000,
+    maxOutput:4096,maxSteps:40,maxTaskMs:30*60*1000,
     sandboxImage:env.AD507_SANDBOX_IMAGE||'ad507-checks:reviewed',
     publishing:env.AD507_PUBLISH_ENABLED==='true',env};
 }
