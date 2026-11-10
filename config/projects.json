@@ -63,6 +63,15 @@
       "baseBranch": "work/as-developer-agent-start-20261109",
       "productionWrite": false,
       "mergeMain": false
+    },
+    "leveia-agents": {
+      "name": "LeveIA Agents (plataforma comercial independiente)",
+      "repository": "direcciones507/leveia-agents",
+      "baseBranch": "main",
+      "enabled": true,
+      "mode": "development",
+      "productionWrite": false,
+      "mergeMain": false
     }
   }
 }
