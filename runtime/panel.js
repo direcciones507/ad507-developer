@@ -12,7 +12,7 @@ function projectInfo(){const p=status.projects.find(p=>p.id===$('project').value
 async function refresh(){
   status=await api('status');csrf=status.csrf;$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;if(!$('task-form').contains($('message')))$('task-form').append($('message'));
   $('provider').textContent=`Proveedor: ${status.provider}${status.provider==='simulation'?' · SIMULACIÓN':''}`;$('readiness').textContent=status.provider==='simulation'?'Modo de prueba: sin llamadas a modelos externos.':status.ready?'Integración configurada; la prueba real debe verificarse.':'Inferencia detenida: faltan credencial o configuración autorizada.';
-  $('runner-status').textContent=status.checkBackend==='github-actions'?`Ejecutor GitHub Actions: ${status.remote?.ready?'configurado':'pendiente de configuración'}. Minutos reservados: ${status.remote?.minutesReserved??0} / ${status.remote?.minutesLimit??0}.`:'Ejecutor Docker local: requiere un host e imagen revisados.';
+  $('runner-status').textContent=status.checkBackend==='github-actions'?`Ejecutor GitHub Actions: ${status.remote?.ready?'configurado':'pendiente de configuración'}. La cuota de minutos la administra GitHub; no hay un límite interno de minutos para la tarea.`:'Ejecutor Docker local: requiere un host e imagen revisados.';
   const previous=$('project').value;
   const successor=p=>p.mode==='preparation'&&!p.repository?status.projects.find(other=>other.mode==='development'&&other.repository&&other.name.startsWith(p.name)):null;
   const preferred=status.projects.find(p=>successor(p));
