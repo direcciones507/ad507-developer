@@ -63,6 +63,14 @@ export class Engine {
       if(t.state!=='awaiting_approval')throw Error('INVALID_TRANSITION');
       if(t.gate==='scope')throw Error('PROTECTED_OPERATION_NOT_IMPLEMENTED');
       if(t.gate==='delivery'){
+        const changed=t.files?.length>0;
+        const currentChecks=(t.checks||[]).filter(c=>c.revision===(t.revision||0));
+        if(changed&&t.provider!=='simulation'&&!currentChecks.some(c=>c.passed===true&&c.skipped!==true)){
+          throw Error('VERIFIED_CHECK_REQUIRED_BEFORE_PR');
+        }
+        if(changed&&currentChecks.some(c=>c.passed===false&&c.skipped!==true)){
+          throw Error('FAILED_CHECK_BLOCKS_PR');
+        }
         if(t.provider==='simulation'||!projectFor(this.c,t.project).repository){t.state='completed';t.reason='Entregable local aprobado; no publicado.';}
         else {if(!this.c.publishing)throw Error('PUBLISH_NOT_CONFIGURED');t.phase='publish';t.state='pending';}
       }else if(t.gate==='recovery'){
@@ -198,10 +206,8 @@ export class Engine {
     if(name==='replace_repository_text'){const result=await this.w.replace(t,p,args.path,args.oldText,args.newText);if(!result?.error){t.revision=(t.revision||0)+1;t.noProgress=false;}return result;}
     if(name==='inspect_diff')return this.w.diff(t);
     if(name==='run_safe_check'){
-      // Owner-selected development flow: no automatic remote dispatch.
-      // Never misrepresent a skipped check as passed.
-      this.s.event(t.id,'automatic_check_skipped',{check:args.check,reason:'OWNER_DEVELOPMENT_FLOW'});
-      return {check:args.check,passed:false,skipped:true,reason:'AUTOMATED_CHECKS_DISABLED_FOR_DEVELOPMENT',hint:'Continue implementing requested code. Deliver the diff as unverified for human review; do not retry checks.'};
+      // Run the configured isolated executor. Never manufacture a passing check.
+      // A missing executor must remain an explicit, blocking failure.
       // A read-only diagnostic must not dispatch CI or sandbox checks, even if the model asks.
       const readOnly=readOnlyTask(t.instructions);
       if(readOnly){const changed=await this.w.diff(t);if(changed.length===0)return {check:args.check,passed:false,skipped:true,reason:'READ_ONLY_DIAGNOSTIC_NO_CHECKS',hint:'Complete the diagnostic from repository evidence; do not request further checks.'};}
