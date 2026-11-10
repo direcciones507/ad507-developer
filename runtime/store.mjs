@@ -94,6 +94,20 @@ export class Store {
     if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
     return this.tx(()=>{const previous=this.globalBudgetLimit(baseline);if(amount<this.globalUsage())throw Error('BUDGET_BELOW_COMMITTED_USAGE');this.db.prepare("INSERT INTO settings(key,value) VALUES('global_budget_micro_usd',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(amount));this.event(null,'global_budget_limit_changed',{previous,amount});return {previous,amount};});
   }
+  budgetBreakdown(){
+    const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.state FROM reservations r LEFT JOIN tasks t ON t.id=r.task").all();
+    const settledIds=new Set();
+    for(const e of this.db.prepare("SELECT detail FROM events WHERE kind='budget_settled'").all()){
+      try{const id=JSON.parse(e.detail).id;if(typeof id==='string')settledIds.add(id);}catch{}
+    }
+    let settled=0,unattributed=0,active=0;
+    for(const r of rows){
+      if(settledIds.has(r.id))settled+=r.amount;
+      else unattributed+=r.amount;
+      if(['running','pending'].includes(r.state))active+=r.amount;
+    }
+    return {settledHistorical:settled,unattributedHistorical:unattributed,activeTaskReservations:active,recordCount:rows.length,period:'all-time',externalProviderVerified:false};
+  }
   budgetAudit(){
     const projects=this.db.prepare('SELECT project,reserved FROM budgets ORDER BY project').all();
     const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.project,t.state,t.data FROM reservations r LEFT JOIN tasks t ON t.id=r.task ORDER BY t.updated DESC").all();
