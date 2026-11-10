@@ -128,6 +128,17 @@ export class Engine {
       if(['paused','cancelled','awaiting_approval'].includes(current.state)){
         // Finish an in-flight atomic step, retaining requested control state and its recovery marker.
         t.state=current.state;t.gate=current.gate;t.reason=current.reason;this.s.save(t);this.s.event(t.id,'worker_stopped',{state:t.state,inflight:t.inflight??null});
+      }else if(e.message==='STEP_LIMIT' && t.phase==='model'){
+        // Preserve real edits when the agent exhausts its step allowance.
+        // Never represent unfinished tool batches or unrun checks as successful.
+        let changed=[];try{changed=await this.w.diff(t);}catch{}
+        if(changed.length){
+          t.files=changed;t.pendingCalls=[];t.inflight=null;t.state='awaiting_approval';t.gate='delivery';
+          t.summary='El agente alcanzó el límite de pasos después de modificar archivos. Trabajo incompleto: revisar el diff y los cambios antes de aprobar. No se ejecutaron pruebas automáticas.';
+          t.reason='Entrega parcial SIN VERIFICAR por límite de pasos. Revisión humana obligatoria; no afirmar que el código está validado.';
+          this.s.save(t);this.s.event(t.id,'delivery_unverified',{files:changed,reason:'STEP_LIMIT_PARTIAL_DELIVERY'});
+          this.s.event(t.id,'delivery_ready',{files:changed,checks:t.checks.map(c=>({check:c.check,passed:c.passed})),partial:true});
+        }else{t.state='failed';t.reason='STEP_LIMIT';this.s.save(t);this.s.event(t.id,'worker_failed',{reason:t.reason});}
       }else if(e.message==='REMOTE_DISPATCH_UNCERTAIN'){t.state='awaiting_approval';t.gate='recovery';t.reason='Resultado del envío remoto incierto. No se reintenta automáticamente; revisar el job antes de continuar.';this.s.save(t);this.s.event(t.id,'remote_dispatch_review_required');}
       else{t.state='failed';t.reason=controller.signal.aborted?'TASK_TIMEOUT':/^[A-Z_0-9]+$/.test(e.message)?e.message:'EXECUTION_FAILED';this.s.save(t);const site=String(e.stack||'').split('\n').slice(1).find(line=>/runtime\/(engine|provider|store)\.mjs:\d+/.test(line))?.match(/runtime\/(engine|provider|store)\.mjs:(\d+)/);this.s.event(t.id,'worker_failed',{reason:t.reason,...(t.reason==='EXECUTION_FAILED'?{errorType:String(e.name||'Error').slice(0,60),site:site?site[1]+':'+site[2]:'unknown'}:{})});}
     }finally{clearTimeout(timeout);const latest=this.s.get(t.id);latest.elapsedMs=(latest.elapsedMs||0)+Date.now()-started;this.s.save(latest);this.active.delete(t.id);}
