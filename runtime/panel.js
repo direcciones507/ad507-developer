@@ -62,9 +62,10 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
       if(!target)return showError(new Error('PROYECTO_NO_DISPONIBLE'));
       $('project').value=t.project;projectInfo();
       const details=t.files?.length?'Archivos implicados: '+t.files.join(', ')+'. ':'';
-      $('instructions').value='CORRECCIÓN DE ENTREGA ANTERIOR ('+t.id.slice(0,8)+'). '+details+'Revisa el resultado de la tarea anterior y corrige el problema siguiente: ';
+      const previousDelivery=typeof t.delivery?.url==='string'&&/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[0-9]+$/.test(t.delivery.url)?' Pull Request anterior: '+t.delivery.url+'. ':'';
+      $('instructions').value='CORRECCIÓN DE ENTREGA ANTERIOR ('+t.id.slice(0,8)+'). '+details+previousDelivery+'Comprueba primero los cambios existentes y evita duplicar modificaciones. Corrige lo siguiente: ';
       $('instructions').focus();$('instructions').scrollIntoView({behavior:'smooth',block:'center'});
-      $('message').hidden=false;$('message').textContent='Describe la corrección y pulsa Crear e iniciar trabajo. No se enviará nada hasta que tú lo confirmes.';
+      $('message').hidden=false;$('message').textContent='Describe la corrección y pulsa Crear e iniciar trabajo. ATENCIÓN: esta opción crea una tarea nueva y todavía no reutiliza automáticamente el espacio de trabajo anterior. Si hay cambios sin publicar en GitHub, no continúes hasta recuperarlos. No se enviará nada hasta que tú lo confirmes.';
     });
     deliveryActions.append(correction);
   }
