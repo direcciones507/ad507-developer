@@ -43,7 +43,7 @@ export class ActionsChecks {
     const scopes = [[`month:${month}`, this.c.actionsMonthlyMinutes], [`project:${job.project}:${month}`, this.c.actionsProjectMinutes], [`task:${job.task}`, this.c.actionsTaskMinutes]];
     for (const [scope, cap] of scopes) {
       const used = this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get(scope)?.reserved || 0;
-      if (!Number.isSafeInteger(cap) || used + job.minutes > cap) throw Error('ACTIONS_MINUTES_EXHAUSTED');
+      if (!Number.isSafeInteger(cap) || used + job.minutes > cap) { this.s.event(job.task,'actions_budget_blocked',{scope:scope.startsWith('month:')?'monthly':scope.startsWith('project:')?'project':'task',used,limit:cap,requested:job.minutes}); throw Error('ACTIONS_MINUTES_EXHAUSTED'); }
     }
     for (const [scope] of scopes) this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
   }
