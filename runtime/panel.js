@@ -36,12 +36,25 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
   const completed=t.state==='awaiting_approval'&&t.gate==='delivery';
   const heading=completed?'Cambios preparados para tu revisión':t.state==='completed'?'Trabajo cerrado':t.state==='failed'?'El trabajo se detuvo':'Trabajo en proceso';
   overview.append(node('h4',heading));
-  overview.append(node('p',t.files?.length?'El agente modificó '+t.files.length+' archivo(s): '+t.files.join(', ')+'.':'Todavía no hay archivos modificados en esta entrega.'));
-  overview.append(node('p',t.files?.length?'Estado: cambios sin pruebas automáticas. Aún no están publicados.':'Estado: no hay cambios de código para publicar.'));
+  // Resumen comprensible para el propietario: proyecto, problema, corrección, archivos, pendientes, pruebas y estado de entrega.
+  const files=t.files||[],checks=t.checks||[];
+  const deliveryUrl=typeof t.delivery?.url==='string'&&t.delivery.url.startsWith('https://github.com/')?t.delivery.url:'';
+  const deliveryState=deliveryUrl?'PUBLICADO_EN_GITHUB_PENDIENTE_DE_REVISION':files.length?'CAMBIOS_PREPARADOS_PENDIENTES_DE_ENVIAR_A_GITHUB':t.state==='failed'?'SIN_ENTREGA':t.state==='completed'?'TRABAJO_CERRADO_SIN_ENTREGA':'SIN_CAMBIOS_AUN';
+  let deliveryText='Cambios preparados, pendientes de enviar a GitHub.';
+  if(deliveryUrl)deliveryText='Cambios enviados a GitHub en una rama de trabajo. Están pendientes de tu revisión y no están publicados en producción.';
+  else if(deliveryState==='SIN_ENTREGA')deliveryText='No hay entrega que revisar: el trabajo se detuvo antes de preparar cambios.';
+  else if(deliveryState==='TRABAJO_CERRADO_SIN_ENTREGA')deliveryText='Trabajo cerrado sin entrega enviada a GitHub.';
+  else if(deliveryState==='SIN_CAMBIOS_AUN')deliveryText='Todavía no hay cambios preparados ni enviados a GitHub.';
+  const testsText=checks.length?`Pruebas ejecutadas: ${checks.length}. ${checks.every(c=>c.passed)?'Todas aprobadas.':'Hay pruebas fallidas; revisa los detalles técnicos.'}`:'No se ejecutaron pruebas automáticas: el resultado NO está verificado.';
+  const pending=[];if(!deliveryUrl)pending.push('enviar los cambios a la rama de trabajo en GitHub');if(!checks.length)pending.push('verificar el resultado con pruebas');if(completed)pending.push('tu aprobación de esta etapa (no autoriza publicar en producción)');
+  for(const [label,value]of [['Proyecto trabajado',project?.name||t.project],['Qué problema se encontró',t.reason||'No se registró un problema concreto; revisa el resumen e instrucciones de la tarea.'],['Qué se corrigió realmente',t.summary||'El agente no describió la corrección en lenguaje natural.'],['Qué archivos se modificaron',files.length?files.join(', '):'Ninguno todavía.'],['Qué quedó pendiente',pending.length?pending.join('; ')+'.':'Nada pendiente en esta etapa.'],['Pruebas',testsText],['Estado de los cambios',deliveryText]]){const d=node('dl','');d.className='delivery-item';const dt=node('dt',label),dd=node('dd',value);d.append(dt,dd);overview.append(d);}
   if(project?.repository){const a=node('a','Abrir repositorio en GitHub');a.href='https://github.com/'+project.repository;a.target='_blank';a.rel='noopener noreferrer';overview.append(a);}
   if(completed)overview.append(node('p','Puedes revisar el resumen y solicitar una corrección con un nuevo trabajo. Aprobar entrega prepara la siguiente etapa de revisión; no significa publicar directamente en producción.'));
   if(t.state==='failed')overview.append(node('p','Motivo del fallo: '+(t.reason||'No especificado')+'.'));
   const deliveryActions=$('delivery-actions');deliveryActions.replaceChildren();
+  const resultButton=node('button','Ver resultado');resultButton.type='button';resultButton.className='secondary';
+  resultButton.addEventListener('click',()=>{$('delivery-overview').hidden=false;$('delivery-overview').scrollIntoView({behavior:'smooth',block:'center'});$('delivery-overview').focus?.();});
+  deliveryActions.append(resultButton);
   if(['awaiting_approval','completed','failed'].includes(t.state)){
     const correction=node('button','Solicitar corrección');correction.type='button';correction.className='secondary';
     correction.addEventListener('click',()=>{
@@ -55,7 +68,18 @@ async function detail(id){if(selected!==id){$('file-content').hidden=true;$('fil
     });
     deliveryActions.append(correction);
   }
-  $('summary').textContent=t.summary||'El agente no proporcionó un resumen en lenguaje natural. No se puede determinar la corrección exacta únicamente por los nombres de archivos.';$('pr').replaceChildren();if(t.delivery?.url?.startsWith('https://github.com/')){const a=node('a','Abrir PR para revisión');a.href=t.delivery.url;a.target='_blank';a.rel='noopener noreferrer';$('pr').append(a);}
+  if(t.state==='awaiting_approval'&&t.gate!=='scope'){
+    const approve=node('button','Aprobar cambios');approve.type='button';
+    approve.addEventListener('click',async()=>{approve.disabled=true;try{await api('tasks/'+id+'/control','POST',{action:'approve'});await refresh();}catch(e){showError(e);}finally{approve.disabled=false;}});
+    deliveryActions.append(approve);
+    deliveryActions.append(node('p','Aprobar autoriza únicamente la siguiente etapa de revisión. No publica los cambios en producción.'));
+  }
+  $('summary').textContent=t.summary||'El agente no proporcionó un resumen en lenguaje natural. No se puede determinar la corrección exacta únicamente por los nombres de archivos.';
+  const deliveryBlock=$('pr');deliveryBlock.replaceChildren();
+  if(deliveryUrl){const a=node('a','Abrir PR para revisión');a.href=deliveryUrl;a.target='_blank';a.rel='noopener noreferrer';deliveryBlock.append(a);}
+  else deliveryBlock.append(node('p','Cambios preparados, pendientes de enviar a GitHub.'));
+  if(project?.repository){const repo=node('a','Abrir repositorio en GitHub');repo.href='https://github.com/'+project.repository;repo.target='_blank';repo.rel='noopener noreferrer';deliveryBlock.append(repo);}
+  if(t.branch&&t.branch.startsWith('ad507/task-'))deliveryBlock.append(node('p','Rama de trabajo: '+t.branch+' (solo si la entrega ya se envió; verifica el enlace antes de abrirlo).'));
   $('checks').replaceChildren();if(!t.checks.length)$('checks').append(node('p','Sin pruebas de código ejecutadas en esta tarea.'));for(const check of t.checks){const d=node('details','');d.append(node('summary',`${check.check}: ${check.passed?'APROBADA':'FALLIDA'} · ${check.at||''}`),node('pre',check.output||'Sin salida'));$('checks').append(d);}
   $('remote-checks').replaceChildren();for(const check of t.remoteChecks||[]){const row=node('p',`${check.check}: ${check.state} · ${check.minutesReserved} min reservados `);if(check.runUrl?.startsWith('https://github.com/direcciones507/ad507-developer/actions/runs/')){const link=node('a','Ver ejecución');link.href=check.runUrl;link.target='_blank';link.rel='noopener noreferrer';row.append(link);}$('remote-checks').append(row);}
   $('files').replaceChildren();for(const path of t.files){const b=node('button',path);b.className='secondary';b.addEventListener('click',async()=>{try{const f=await api(`tasks/${id}/file?path=${encodeURIComponent(path)}`);$('file-content').hidden=false;$('file-content').textContent=f.content;}catch(e){showError(e);}});$('files').append(b);}
