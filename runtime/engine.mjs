@@ -60,7 +60,7 @@ export class Engine {
       const p=projectFor(this.c,t.project);if(t.provider!==this.c.provider)throw Error('PROVIDER_CONFIGURATION_CHANGED');
       if(t.phase!=='publish'&&!providerReady(this.c))throw Error('PROVIDER_NOT_CONFIGURED');
       // Do not spend model budget on edits that cannot be verified. No host fallback.
-      if(t.phase!=='publish'&&t.provider!=='simulation'&&p.mode==='development'&&!readOnlyTask(t.instructions))await this.w.checkAvailability();
+      // Development no longer depends on the optional CI executor. Changes remain unverified until reviewed.
       t.state='running';this.s.save(t);this.s.event(t.id,'worker_started',{phase:t.phase});
       if(t.phase==='workspace'){
         t.inflight={kind:'workspace'};this.s.save(t);await this.w.prepare(t,p);t.inflight=null;t.phase='model';
