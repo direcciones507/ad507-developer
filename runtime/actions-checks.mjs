@@ -49,7 +49,7 @@ export class ActionsChecks {
   async api(path, method = 'GET', body) {
     if (!this.c.actionsToken) throw Error('ACTIONS_TOKEN_REQUIRED');
     const response = await this.fetch(`https://api.github.com/repos/${repo}/${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(15000),
-      headers: { Authorization: `Bearer ${this.c.actionsToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2026-03-10' }, body: body ? JSON.stringify(body) : undefined });
+      headers: { Authorization: `Bearer ${this.c.actionsToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' }, body: body ? JSON.stringify(body) : undefined });
     if (!response.ok) throw Error(`ACTIONS_HTTP_${response.status}`);
     if (response.status === 204) return null;
     return JSON.parse(await readLimited(response, 512000));
