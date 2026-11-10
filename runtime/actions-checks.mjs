@@ -36,7 +36,7 @@ export class ActionsChecks {
     if (job.state === 'cancelled' || job.state === 'expired' || Date.now() > job.expires) throw Error('RUNNER_TICKET_REVOKED');
     return job;
   }
-  ready() { return Boolean(this.c.actionsToken && this.c.actionsIncludedOnly && Number.isSafeInteger(this.c.actionsMonthlyMinutes) && this.c.actionsMonthlyMinutes >= 10 && /^[a-f0-9]{40}$/.test(this.c.actionsSHA || '') && this.c.actionsRef); }
+  ready() { return Boolean(this.c.actionsToken && /^[a-f0-9]{40}$/.test(this.c.actionsSHA || '') && this.c.actionsRef); }
   usage() { const month = new Date().toISOString().slice(0,7); return this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get('month:' + month)?.reserved || 0; }
   reserve(job) {
     // GitHub owns Actions quota enforcement. These rows are audit accounting,
