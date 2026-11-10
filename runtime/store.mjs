@@ -43,6 +43,7 @@ export class Store {
   reserve(t, amount, projectCap, globalCap=Number.MAX_SAFE_INTEGER) {
     if(!Number.isSafeInteger(amount)||amount<=0)throw Error('INVALID_RESERVATION');
     return this.tx(()=>{const fresh=this.get(t.id);const used=this.projectUsage(t.project);
+      t.budget=fresh.budget;
       if(fresh.reserved+amount>fresh.budget||used+amount>projectCap||this.globalUsage()+amount>globalCap)throw Error('BUDGET_EXHAUSTED');
       const id=randomUUID(); this.db.prepare('INSERT INTO reservations VALUES(?,?,?)').run(id,t.id,amount);
       this.db.prepare('INSERT INTO budgets VALUES(?,?) ON CONFLICT(project) DO UPDATE SET reserved=reserved+excluded.reserved').run(t.project,amount);
