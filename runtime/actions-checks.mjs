@@ -19,6 +19,7 @@ export class ActionsChecks {
     store.db.exec(`CREATE TABLE IF NOT EXISTS remote_checks(id TEXT PRIMARY KEY, task TEXT NOT NULL, project TEXT NOT NULL,
       fingerprint TEXT UNIQUE NOT NULL, state TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS actions_budget(scope TEXT PRIMARY KEY, reserved INTEGER NOT NULL);`);
+    this.recoverRejectedReservations();
   }
   get(id) { const row = this.s.db.prepare('SELECT data FROM remote_checks WHERE id=?').get(id); if (!row) throw Error('REMOTE_JOB_NOT_FOUND'); return JSON.parse(row.data); }
   // Keep SQL arity explicit; only this helper writes the durable check record.
@@ -45,6 +46,30 @@ export class ActionsChecks {
       if (!Number.isSafeInteger(cap) || used + job.minutes > cap) throw Error('ACTIONS_MINUTES_EXHAUSTED');
     }
     for (const [scope] of scopes) this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
+  }
+  releaseRejected(job, code) {
+    // Only definitive HTTP rejection is refundable. Never release an uncertain
+    // transport failure, which may already have started a remote workflow.
+    if (!/^ACTIONS_HTTP_(?:400|401|403|404|409|422)$/.test(code)) return false;
+    return this.s.tx(() => {
+      const fresh=this.get(job.id);
+      if (fresh.minutesReleased || fresh.runId || !['unknown','dispatching','rejected'].includes(fresh.state)) return false;
+      const month=new Date(fresh.created).toISOString().slice(0,7);
+      for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+        this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(fresh.minutes,scope);
+      fresh.minutesReleased=true;fresh.state='rejected';fresh.dispatchFailureCode=code;this.put(fresh);
+      this.s.event(fresh.task,'remote_check_reservation_released',{id:fresh.id,minutes:fresh.minutes,code});
+      return true;
+    });
+  }
+  recoverRejectedReservations() {
+    // One-time/idempotent reconciliation of legacy definitive HTTP 403 failures.
+    for(const row of this.s.db.prepare("SELECT data FROM remote_checks WHERE state='unknown'").all()){
+      const job=JSON.parse(row.data);
+      const events=this.s.db.prepare("SELECT detail FROM events WHERE task=? AND kind='remote_dispatch_diagnostic'").all(job.task);
+      const rejected=events.some(e=>{try{const d=JSON.parse(e.detail);return d.job===job.id&&/^ACTIONS_HTTP_(?:400|401|403|404|409|422)$/.test(d.code)}catch{return false}});
+      if(rejected)this.releaseRejected(job,'ACTIONS_HTTP_403');
+    }
   }
   async api(path, method = 'GET', body) {
     if (!this.c.actionsToken) throw Error('ACTIONS_TOKEN_REQUIRED');
@@ -102,6 +127,7 @@ export class ActionsChecks {
         // Preserve uncertainty, but record only a safe, bounded diagnostic code.
         const dispatchCode=/^ACTIONS_HTTP_(?:400|401|403|404|409|422|429|500|502|503)$/.test(error.message)?error.message:'ACTIONS_DISPATCH_TRANSPORT_ERROR';
         this.s.event(t.id,'remote_dispatch_diagnostic',{job:id,code:dispatchCode,workflow:'remote-check.yml',ref:job.ref});
+        if(this.releaseRejected(job,dispatchCode))throw Error(dispatchCode);
         throw Error('REMOTE_DISPATCH_UNCERTAIN');
       }
     }
