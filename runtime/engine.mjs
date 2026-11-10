@@ -75,6 +75,11 @@ export class Engine {
         }
         if(t.provider==='simulation'||!projectFor(this.c,t.project).repository){t.state='completed';t.reason='Entregable local aprobado; no publicado.';}
         else {if(!this.c.publishing)throw Error('PUBLISH_NOT_CONFIGURED');t.phase='publish';t.state='pending';}
+      }else if(t.gate==='recovery'&&t.inflight?.kind==='tool'&&t.inflight.name==='run_safe_check'&&t.pendingCalls?.[0]?.id===t.inflight.id){
+        // The remote check is persisted and fingerprinted: retry the pending waiter,
+        // not a new model turn or a second workflow dispatch.
+        t.inflight=null;t.gate=null;t.reason=null;t.state='pending';
+        this.s.event(id,'remote_check_wait_resumed',{callId:t.pendingCalls[0].id});
       }else if(t.gate==='recovery'){
         // Interrupted LLM calls keep their full reservation. Tool mutation is never replayed.
         // For uncertain tools drop remaining calls and re-inspect the workspace on a fresh model turn.
