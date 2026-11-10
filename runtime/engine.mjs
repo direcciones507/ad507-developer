@@ -15,6 +15,24 @@ export class Engine {
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
     if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
+    // A task may mention another product as context, but it must not request
+    // implementation in a different repository from the selected project.
+    const targetPatterns=[
+      {id:'as-developer',match:/\b(?:AS Developer|AD507 Developer)\b/i},
+      {id:'mi-contacto',match:/\bMi Contacto\b/i},
+      {id:'empleos-pa',match:/\b(?:Empleos\.pa|Empleospa)\b/i},
+      {id:'direcciones507',match:/\b(?:Direcciones507|Direcciones LATAM|direcciones\.lat)\b/i}
+    ];
+    const targetHeader=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:PROYECTO\s*(?:OBJETIVO|A MODIFICAR|DE DESTINO)?|REPOSITORIO\s*(?:OBJETIVO|DE DESTINO)?)\s*[:：]\s*([^\n]{1,120})/i)?.[1]||'';
+    if(targetHeader&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeader)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Refuse ambiguous coding requests when the selected repository and the
+    // named implementation target clearly disagree. Mentions elsewhere remain allowed.
+    const codingFocus=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
+    if(codingFocus&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(codingFocus)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(codingFocus)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Also reject a task titled for a different product, such as
+    // "# AS DEVELOPER | FINALIZAR ...", before any provider budget is spent.
+    const title=instructions.match(/^\s*#{1,4}\s*([^\n]{1,160})/m)?.[1]||'';
+    if(title&&/\b(?:finalizar|implementar|corregir|desarrollar|modificar|construir)\b/i.test(title)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(title)))throw Error('PROJECT_SELECTION_MISMATCH');
     let previous=null;
     if(previousTaskId!==undefined&&previousTaskId!==null){
       if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
