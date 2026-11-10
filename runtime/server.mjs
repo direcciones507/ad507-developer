@@ -70,6 +70,16 @@ export function createApp(c,s,e){
       const session=getSession(s,req.headers.cookie,cookieName);if(!session)return send(401,{error:'AUTHENTICATION_REQUIRED'});
       if(req.method==='POST'&&req.headers['x-csrf-token']!==session.csrf)return send(403,{error:'CSRF_REQUIRED'});
       if(req.method==='POST'&&path==='/api/logout'){s.db.prepare('DELETE FROM sessions WHERE hash=?').run(session.hash);res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});}
+      if(req.method==='GET'&&path==='/api/executor/github-access'){
+        if(c.checkBackend!=='github-actions'||!e.w.remote)return send(200,{ready:false,reason:'GITHUB_ACTIONS_NOT_SELECTED'});
+        try{
+          const workflow=await e.w.remote.api('actions/workflows/remote-check.yml');
+          return send(200,{ready:true,workflowState:workflow.state,workflowId:workflow.id,workflowPath:workflow.path,dispatchPermission:'NOT_VERIFIED_BY_READ'});
+        }catch(error){
+          const code=/^ACTIONS_HTTP_\\d{3}$/.test(error.message)?error.message:'GITHUB_ACCESS_CHECK_FAILED';
+          return send(200,{ready:false,reason:code});
+        }
+      }
       if(req.method==='GET'&&path==='/api/executor/preflight'){
         const details=c.checkBackend==='github-actions'?{
           tokenConfigured:Boolean(c.actionsToken),
