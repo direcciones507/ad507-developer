@@ -131,6 +131,6 @@ export function createApp(c,s,e){
         }
       }
       return send(404,{error:'NOT_FOUND'});
-    }catch(err){const error=/^[A-Z_0-9]+$/.test(err.message)?err.message:'REQUEST_FAILED';send(error==='TASK_NOT_FOUND'?404:400,{error});}
+    }catch(err){const error=/^[A-Z_0-9]+$/.test(err.message)?err.message:'REQUEST_FAILED';if(req.method==='POST'&&path==='/api/tasks')console.error('TASK_CREATE_REJECTED',JSON.stringify({error,project:typeof body?.project==='string'?body.project.slice(0,80):null,budget:Number.isSafeInteger(body?.budget)?body.budget:null,globalLimit:s.globalBudgetLimit(c.globalCap)}));send(error==='TASK_NOT_FOUND'?404:400,{error});}
   });
 }
