@@ -191,13 +191,13 @@ export class ActionsChecks {
     else {
       const id = randomUUID();
       job = { id, task: t.id, project: t.project, check: name, revision: t.revision || 0, fingerprint, snapshotHash, state: 'prepared',
-        expectedSHA: this.c.actionsSHA, ref: this.c.actionsRef, minutes: 10, created: Date.now(), expires: Date.now() + 30 * 60 * 1000, runId: null };
+        expectedSHA: this.c.actionsSHA, ref: this.c.actionsRef, minutes: 0, created: Date.now(), expires: Date.now() + 30 * 60 * 1000, runId: null };
       const payload = gzipSync(Buffer.from(JSON.stringify({ ...manifest, job: id, snapshotHash, expectedSHA: job.expectedSHA })));
       if (payload.length > 16000000) throw Error('SNAPSHOT_TOO_LARGE');
       const directory = join(this.c.root, 'checks'); await mkdir(directory, { recursive: true, mode: 0o700 });
       await writeFile(join(directory, id + '.json.gz'), payload, { mode: 0o600 });
       signal.throwIfAborted();
-      this.s.tx(() => { this.reserve(job); this.put(job); this.s.event(t.id, 'remote_check_reserved', { id, check: name, minutes: job.minutes }); });
+      this.s.tx(() => { this.put(job); this.s.event(t.id, 'remote_check_prepared', { id, check: name }); });
       job.state = 'dispatching'; this.put(job); // Persist BEFORE the external dispatch; never retry an uncertain request automatically.
       try {
         const result = await this.api(`actions/workflows/remote-check.yml/dispatches`, 'POST', { ref: job.ref, inputs: { remote_job: id, remote_ticket: this.ticket(job) } });
