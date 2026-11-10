@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createSession,getSession,verify,digest } from './auth.mjs';
 import { projectFor,providerReady } from './config.mjs';
 import { projectToken } from './projects.mjs';
+import {recoverTimedOutTask} from './recovery-policy.mjs';
 const assets={'/':'panel.html','/panel.js':'panel.js','/panel.css':'panel.css'};
 export function publicTask(t){const {messages,inflight,...safe}=t;return {...safe,interrupted:inflight?{kind:inflight.kind,name:inflight.name}:null};}
 export function createApp(c,s,e){
@@ -116,6 +117,18 @@ export function createApp(c,s,e){
         if(req.method==='GET'&&match[2]==='events')return send(200,s.events(id));
         if(req.method==='GET'&&match[2]==='file'){const file=url.searchParams.get('path');if(!t.files.includes(file))throw Error('FILE_NOT_IN_DELIVERABLE');return send(200,{path:file,content:await e.w.read(t,file)});}
         if(req.method==='POST'&&match[2]==='control'){
+          if(body.action==='resume_failed'){
+            if(e.active.has(id))throw Error('STEP_STILL_STOPPING');
+            // Verify the original isolated checkout still exists before any state change.
+            if(t.state!=='failed'||t.reason!=='TASK_TIMEOUT'||t.phase!=='model'||!t.branch)
+              throw Error('RECOVERY_NOT_ELIGIBLE');
+            const changed=await e.w.diff(t);
+            const recovered=recoverTimedOutTask(t,changed);
+            s.save(t);
+            s.event(id,'original_task_resumed',{files:changed,remoteWait:recovered.continuingRemoteCheck,
+              budget:t.budget,reserved:t.reserved,steps:t.steps});
+            return send(200,publicTask(t));
+          }
           if(body.action==='recover'){
             if(t.state!=='failed'||!['BUDGET_EXHAUSTED','CHECK_NOT_AUTHORIZED'].includes(t.reason)||t.phase!=='model'||!t.branch)throw Error('RECOVERY_NOT_ELIGIBLE');
             const changed=await e.w.diff(t);
