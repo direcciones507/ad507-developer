@@ -92,7 +92,23 @@ export class Store {
   globalBudgetLimit(fallback){const row=this.db.prepare("SELECT value FROM settings WHERE key='global_budget_micro_usd'").get();const value=row?Number(row.value):fallback;if(!Number.isSafeInteger(value)||value<1)throw Error('INVALID_GLOBAL_BUDGET');return value;}
   setGlobalBudgetLimit(amount,baseline){
     if(!Number.isSafeInteger(amount)||amount<1||amount>1000000000)throw Error('INVALID_GLOBAL_BUDGET');
-    return this.tx(()=>{const previous=this.globalBudgetLimit(baseline);if(amount<this.globalUsage())throw Error('BUDGET_BELOW_COMMITTED_USAGE');this.db.prepare("INSERT INTO settings(key,value) VALUES('global_budget_micro_usd',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(amount));this.event(null,'global_budget_limit_changed',{previous,amount});return {previous,amount};});
+    return this.tx(()=>{const previous=this.globalBudgetLimit(baseline);if(amount<this.globalUsage())throw Error('BUDGET_BELOW_COMMITTED_USAGE');this.db.prepare("INSERT INTO settings(key,value) VALUES('global_budget_micro_usd',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(amount));
+      let adjustedTasks=0;
+      if(amount>previous){
+        const oldSuggested=Math.max(1,previous-10000),newSuggested=Math.max(1,amount-10000);
+        for(const row of this.db.prepare("SELECT data FROM tasks WHERE state IN ('pending','running','paused','awaiting_approval')").all()){
+          const task=JSON.parse(row.data);
+          // Only follow the global cap for tasks already using the old automatic suggestion.
+          // Explicit smaller per-task limits are intentionally left untouched.
+          if(task.budget===oldSuggested||task.budget===previous){
+            task.budget=Math.max(task.budget,newSuggested);
+            this.save(task);
+            this.event(task.id,'task_budget_auto_adjusted',{previousBudget:oldSuggested,newBudget:task.budget,globalLimit:amount});
+            adjustedTasks++;
+          }
+        }
+      }
+      this.event(null,'global_budget_limit_changed',{previous,amount,adjustedTasks});return {previous,amount,adjustedTasks};});
   }
   budgetBreakdown(){
     const rows=this.db.prepare("SELECT r.id,r.task,r.amount,t.state FROM reservations r LEFT JOIN tasks t ON t.id=r.task").all();
