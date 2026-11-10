@@ -71,6 +71,34 @@ export class ActionsChecks {
       if(rejected)this.releaseRejected(job,'ACTIONS_HTTP_403');
     }
   }
+  async reconcileUnclaimedDispatches() {
+    // Historical uncertain dispatches can be reconciled only after expiry and
+    // after a complete GitHub workflow run listing proves no matching run exists.
+    const candidates=this.s.db.prepare("SELECT data FROM remote_checks WHERE state='unknown'").all()
+      .map(row=>JSON.parse(row.data)).filter(j=>!j.runId&&!j.minutesReleased&&Date.now()>j.expires+60000);
+    if(!candidates.length)return;
+    let runs;
+    try{
+      const result=await this.api('actions/workflows/remote-check.yml/runs?event=workflow_dispatch&per_page=100');
+      if(result.total_count>100||!Array.isArray(result.workflow_runs))return;
+      runs=result.workflow_runs;
+    }catch{return;}
+    for(const job of candidates){
+      // A listing covering the candidate's creation time is necessary.
+      if(runs.length&&Date.parse(runs[runs.length-1].created_at)>job.created)continue;
+      const found=runs.some(run=>run.display_title===`AD507 check ${job.id}`);
+      if(found)continue;
+      this.s.tx(()=>{
+        const fresh=this.get(job.id);
+        if(fresh.minutesReleased||fresh.runId||fresh.state!=='unknown')return;
+        const month=new Date(fresh.created).toISOString().slice(0,7);
+        for(const scope of [`month:${month}`,`project:${fresh.project}:${month}`,`task:${fresh.task}`])
+          this.s.db.prepare('UPDATE actions_budget SET reserved=MAX(0,reserved-?) WHERE scope=?').run(fresh.minutes,scope);
+        fresh.minutesReleased=true;fresh.state='rejected';fresh.dispatchFailureCode='NO_GITHUB_RUN_AFTER_EXPIRY';this.put(fresh);
+        this.s.event(fresh.task,'remote_check_reservation_released',{id:fresh.id,minutes:fresh.minutes,code:'NO_GITHUB_RUN_AFTER_EXPIRY'});
+      });
+    }
+  }
   async reconcileFinishedRuns() {
     // Reservations are upper bounds, not actual GitHub runner minutes.
     // Only settle runs whose GitHub API status is definitively completed.
@@ -126,6 +154,7 @@ export class ActionsChecks {
   async run(t, project, name, signal) {
     requireCheck(project, name); signal.throwIfAborted();
     await this.reconcileFinishedRuns();
+    await this.reconcileUnclaimedDispatches();
     // Fail closed: this runner is authenticated against LEVEIA only. Never bill
     // LEVEIA Actions minutes for checks requested by another project.
     if (project.mode !== 'development' || !project.repository || t.project !== project.id) throw Error('PROJECT_ACTIONS_RUNNER_NOT_CONFIGURED');
