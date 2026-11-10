@@ -96,9 +96,12 @@ export class ActionsChecks {
         if (result?.workflow_run_id) { job.runId = String(result.workflow_run_id); job.runUrl = `https://github.com/${repo}/actions/runs/${job.runId}`; }
         if (job.state === 'dispatching') job.state = 'queued';
         this.put(job);
-      } catch {
+      } catch (error) {
         if(signal.aborted&&this.s.get(t.id).state==='cancelled')await this.cancelTask(t.id);
         job = this.get(id); if (job.state === 'dispatching') { job.state = 'unknown'; this.put(job); }
+        // Preserve uncertainty, but record only a safe, bounded diagnostic code.
+        const dispatchCode=/^ACTIONS_HTTP_(?:400|401|403|404|409|422|429|500|502|503)$/.test(error.message)?error.message:'ACTIONS_DISPATCH_TRANSPORT_ERROR';
+        this.s.event(t.id,'remote_dispatch_diagnostic',{job:id,code:dispatchCode,workflow:'remote-check.yml',ref:job.ref});
         throw Error('REMOTE_DISPATCH_UNCERTAIN');
       }
     }
