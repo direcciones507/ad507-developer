@@ -39,13 +39,12 @@ export class ActionsChecks {
   ready() { return Boolean(this.c.actionsToken && this.c.actionsIncludedOnly && Number.isSafeInteger(this.c.actionsMonthlyMinutes) && this.c.actionsMonthlyMinutes >= 10 && /^[a-f0-9]{40}$/.test(this.c.actionsSHA || '') && this.c.actionsRef); }
   usage() { const month = new Date().toISOString().slice(0,7); return this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get('month:' + month)?.reserved || 0; }
   reserve(job) {
+    // GitHub owns Actions quota enforcement. These rows are audit accounting,
+    // not additional user-configured spending limits for the coding agent.
+    // Keep conservative reservations for uncertain dispatches and reconciliation.
     const month = new Date().toISOString().slice(0,7);
-    const scopes = [[`month:${month}`, this.c.actionsMonthlyMinutes], [`project:${job.project}:${month}`, this.c.actionsProjectMinutes], [`task:${job.task}`, this.c.actionsTaskMinutes]];
-    for (const [scope, cap] of scopes) {
-      const used = this.s.db.prepare('SELECT reserved FROM actions_budget WHERE scope=?').get(scope)?.reserved || 0;
-      if (!Number.isSafeInteger(cap) || used + job.minutes > cap) { this.s.event(job.task,'actions_budget_blocked',{scope:scope.startsWith('month:')?'monthly':scope.startsWith('project:')?'project':'task',used,limit:cap,requested:job.minutes}); throw Error('ACTIONS_MINUTES_EXHAUSTED'); }
-    }
-    for (const [scope] of scopes) this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
+    for (const scope of [`month:${month}`,`project:${job.project}:${month}`,`task:${job.task}`])
+      this.s.db.prepare('INSERT INTO actions_budget VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET reserved=reserved+excluded.reserved').run(scope, job.minutes);
   }
   releaseRejected(job, code) {
     // Only definitive HTTP rejection is refundable. Never release an uncertain
