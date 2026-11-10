@@ -32,7 +32,7 @@ export class Engine {
     // Also reject a task titled for a different product, such as
     // "# AS DEVELOPER | FINALIZAR ...", before any provider budget is spent.
     const title=instructions.match(/^\s*#{1,4}\s*([^\n]{1,160})/m)?.[1]||'';
-    if(title&&/\b(?:finalizar|implementar|corregir|desarrollar|modificar|construir)\b/i.test(title)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(title)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Titles can mention other products as context. Only an explicit target header or an actionable objective above blocks mismatched repositories.
     let previous=null;
     if(previousTaskId!==undefined&&previousTaskId!==null){
       if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
