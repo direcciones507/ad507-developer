@@ -20,7 +20,7 @@ export function actionablePolicyText(task: string) {
   // Split at sentence boundaries, then discard negative-only clauses for the
   // approval classifier. Preserve positive requests following "pero"/"but".
   return task.split(/([.;\n])/).map(part => {
-    if (/^[.;\\n]$/.test(part)) return part;
+    if (/^[.;\n]$/.test(part)) return part;
     const clauses=part.split(/\b(?:pero|but|however)\b/i);
     return clauses.map(clause => {
       const trimmed=clause.trim().replace(/^[-*\d)\s]+/,'');
