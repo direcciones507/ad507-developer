@@ -14,7 +14,7 @@ export function normalizeProject(id,input,env={}){
     tokenEnv:id==='leveia'?'AD507_LEVEIA_GITHUB_TOKEN':`AD507_PROJECT_${key}_GITHUB_TOKEN`,source:id==='leveia'?env.AD507_LEVEIA_SOURCE:undefined};
 }
 export function registeredProject(c,p){const known=c.projects?.[p.id];if(!known?.enabled||known.repository!==p.repository||known.baseBranch!==p.baseBranch)throw Error('PROJECT_NOT_AUTHORIZED');return known;}
-export function projectToken(c,project){const p=registeredProject(c,project);return c.env?.[p.tokenEnv]||(p.id==='mi-contacto'?(c.env?.AD507_PROJECT_DIRECCIONES507_GITHUB_TOKEN||c.env?.AD507_GITHUB_TOKEN):undefined)||(p.id==='leveia'?(c.sourceToken||c.env?.AD507_GITHUB_TOKEN):undefined);}
+export function projectToken(c,project){const p=registeredProject(c,project);return c.env?.[p.tokenEnv]||(p.id==='as-developer'?c.env?.AD507_GITHUB_TOKEN:undefined)||(p.id==='mi-contacto'?(c.env?.AD507_PROJECT_DIRECCIONES507_GITHUB_TOKEN||c.env?.AD507_GITHUB_TOKEN):undefined)||(p.id==='leveia'?(c.sourceToken||c.env?.AD507_GITHUB_TOKEN):undefined);}
 export class ProjectRegistry{
   constructor(c,s){this.c=c;this.s=s;s.db.exec('CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,data TEXT NOT NULL)');
     for(const [id,p] of Object.entries(c.projects))s.db.prepare('INSERT OR IGNORE INTO projects VALUES(?,?)').run(id,JSON.stringify(p));
