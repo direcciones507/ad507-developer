@@ -14,7 +14,7 @@ export class Engine {
     if(/(?:sk-[a-zA-Z0-9_-]{16,}|-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,})/.test(instructions))throw Error('DO_NOT_SUBMIT_SECRETS');
     if(provider&&provider!==this.c.provider)throw Error('PROVIDER_CHANGE_REQUIRES_CONFIGURATION');
     if(p.mode==='preparation'&&!p.repository&&Object.values(this.c.projects).some(other=>other.enabled&&other.repository&&instructions.includes(other.repository)))throw Error('PROJECT_SELECTION_MISMATCH');
-    if(Object.values(this.c.projects).some(other=>other.id!==p.id&&other.repository&&other.repository!==p.repository&&instructions.toLowerCase().includes(other.repository.toLowerCase())))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Repository names in task context are allowed; only explicit target declarations below may reject a mismatched repository.
     // A task may mention another product as context, but it must not request
     // implementation in a different repository from the selected project.
     const targetPatterns=[
