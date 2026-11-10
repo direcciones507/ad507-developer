@@ -25,8 +25,10 @@ export class Engine {
     ];
     const targetHeader=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:PROYECTO\s*(?:OBJETIVO|A MODIFICAR|DE DESTINO)?|REPOSITORIO\s*(?:OBJETIVO|DE DESTINO)?)\s*[:：]\s*([^\n]{1,120})/i)?.[1]||'';
     if(targetHeader&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(targetHeader)))throw Error('PROJECT_SELECTION_MISMATCH');
-    const implementationTarget=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
-    if(implementationTarget&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(implementationTarget)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(implementationTarget)))throw Error('PROJECT_SELECTION_MISMATCH');
+    // Refuse ambiguous coding requests when the selected repository and the
+    // named implementation target clearly disagree. Mentions elsewhere remain allowed.
+    const codingFocus=instructions.match(/(?:^|\n)\s*(?:#{1,4}\s*)?(?:OBJETIVO|TAREA PRINCIPAL|SOLICITUD)\s*[:：]\s*([^\n]{1,200})/i)?.[1]||'';
+    if(codingFocus&&/(?:implement|modific|correg|desarroll|finaliz|constru|program)/i.test(codingFocus)&&targetPatterns.some(x=>x.id!==p.id&&x.match.test(codingFocus)))throw Error('PROJECT_SELECTION_MISMATCH');
     let previous=null;
     if(previousTaskId!==undefined&&previousTaskId!==null){
       if(typeof previousTaskId!=='string'||!/^[a-f0-9-]{36}$/.test(previousTaskId))throw Error('INVALID_PREVIOUS_TASK');
